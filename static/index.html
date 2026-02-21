@@ -322,6 +322,12 @@ const state = {
   voiceTranscript: "",
   voiceMuted:      false,
   descFadeTimer:   null,
+  // Live API WebSocket
+  ws:              null,
+  wsSessionId:     null,
+  wsConnected:     false,
+  frameInterval:   null,
+  useFallback:     false,
 };
 
 const tut = {
@@ -336,8 +342,11 @@ const tut = {
   isGenerating:       false,
   target:  { x: 0, y: 0, w: 0, h: 0 },
   current: { x: 0, y: 0, w: 0, h: 0 },
-  analysisInterval: null,
-  rafId:            null,
+  rafId:   null,
+  // Annotation state machine
+  annotationState:  "IDLE",   // "IDLE" | "SEARCHING" | "TRACKING" | "LOST"
+  lostCount:        0,
+  lastFoundTarget:  { x: 0, y: 0, w: 0, h: 0 },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -414,10 +423,14 @@ async function generateNextStep() {
     tut.currentTarget      = data.target_object;
     tut.currentAction      = data.short_action || "";
     tut.currentHint        = data.hint || "";
+    // Reset annotation state for new step
+    tut.annotationState    = "SEARCHING";
+    tut.lostCount          = 0;
 
     showStep();
     speakText(data.step_description);
     statusEl.textContent = `Tracking: ${data.target_object}`;
+    sendStepToBackend();
   } catch (err) {
     showPlaceholder(`Error: ${err.message}`, "#f87171");
     console.error("generateNextStep:", err);
@@ -446,7 +459,7 @@ async function startTutorial() {
 
   clearQuickAnnotations();
   startRenderLoop();
-  startTrackingLoop();
+  await connectTrackingWebSocket();
   await generateNextStep();
 }
 
@@ -454,8 +467,9 @@ function stopTutorial() {
   tut.isRunning    = false;
   tut.isGenerating = false;
 
-  clearInterval(tut.analysisInterval); tut.analysisInterval = null;
-  cancelAnimationFrame(tut.rafId);     tut.rafId = null;
+  disconnectTrackingWebSocket();
+  cancelAnimationFrame(tut.rafId); tut.rafId = null;
+  tut.annotationState = "IDLE";
 
   overlayCanvas.width  = overlayCanvas.clientWidth;
   overlayCanvas.height = overlayCanvas.clientHeight;
@@ -480,10 +494,149 @@ async function nextStep() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tutorial tracking loop — polls /analyze-step every 600 ms
+// Live API WebSocket tracking — replaces the 600ms polling loop
 // ═══════════════════════════════════════════════════════════════════════════
-function startTrackingLoop() {
-  clearInterval(tut.analysisInterval);
+
+function generateSessionId() {
+  return (crypto.randomUUID ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36));
+}
+
+// Reusable off-screen canvas for frame streaming (avoids GC pressure at 1 fps)
+const _streamCanvas = document.createElement("canvas");
+_streamCanvas.width  = 640;
+_streamCanvas.height = 480;
+const _streamCtx = _streamCanvas.getContext("2d");
+
+let _wsReconnectTimer = null;
+
+async function connectTrackingWebSocket() {
+  if (state.ws && state.wsConnected) return;
+
+  state.wsSessionId = generateSessionId();
+  const wsUrl = `ws://${location.host}/ws/track/${state.wsSessionId}`;
+
+  try {
+    const ws = new WebSocket(wsUrl);
+    state.ws = ws;
+
+    ws.onopen = () => {
+      state.wsConnected = true;
+      state.useFallback  = false;
+      statusEl.textContent = "Live stream connected.";
+      if (tut.currentTarget) sendStepToBackend();
+      startFrameStreaming();
+    };
+
+    ws.onmessage = (event) => {
+      try { handleBackendMessage(JSON.parse(event.data)); }
+      catch (e) { console.warn("ws parse:", e); }
+    };
+
+    ws.onerror = () => {
+      state.wsConnected = false;
+      if (!state.useFallback) {
+        console.warn("Live API unavailable — falling back to polling");
+        state.useFallback = true;
+        startLegacyTrackingLoop();
+      }
+    };
+
+    ws.onclose = () => {
+      state.wsConnected = false;
+      state.ws = null;
+      if (tut.isRunning && !state.useFallback) {
+        statusEl.textContent = "Stream disconnected — reconnecting…";
+        _wsReconnectTimer = setTimeout(() => {
+          if (tut.isRunning) connectTrackingWebSocket();
+        }, 2000);
+      }
+    };
+  } catch (e) {
+    console.warn("WebSocket init failed — falling back to polling:", e);
+    state.useFallback = true;
+    startLegacyTrackingLoop();
+  }
+}
+
+function disconnectTrackingWebSocket() {
+  clearTimeout(_wsReconnectTimer);
+  clearInterval(state.frameInterval); state.frameInterval = null;
+  if (state.ws) {
+    try { state.ws.send(JSON.stringify({ type: "stop" })); } catch (_) {}
+    try { state.ws.close(1000, "tutorial stopped"); } catch (_) {}
+    state.ws = null;
+  }
+  state.wsConnected = false;
+  state.useFallback  = false;
+}
+
+function startFrameStreaming() {
+  clearInterval(state.frameInterval);
+
+  state.frameInterval = setInterval(() => {
+    if (!tut.isRunning || !state.wsConnected || !tut.currentTarget) return;
+    if (tut.isGenerating) return;
+    if (!state.stream || !video.videoWidth) return;
+
+    _streamCtx.drawImage(video, 0, 0, 640, 480);
+    const b64 = _streamCanvas.toDataURL("image/jpeg", 0.70).split(",")[1];
+
+    try {
+      state.ws.send(JSON.stringify({ type: "frame", data: b64 }));
+    } catch (e) { console.warn("ws send:", e); }
+  }, 1000);  // 1 fps — server also rate-gates
+}
+
+function sendStepToBackend() {
+  if (!state.ws || !state.wsConnected) return;
+  try {
+    state.ws.send(JSON.stringify({
+      type:             "step",
+      target_object:    tut.currentTarget,
+      step_instruction: tut.currentDescription,
+      hint:             tut.currentHint,
+    }));
+  } catch (e) { console.warn("ws step send:", e); }
+}
+
+function handleBackendMessage(msg) {
+  if (msg.type === "annotation") {
+    if (msg.found && msg.box_2d) {
+      const [ymin, xmin, ymax, xmax] = msg.box_2d;
+      if (xmax - xmin < 5 || ymax - ymin < 5) return;
+      tut.target = { x: xmin, y: ymin, w: xmax - xmin, h: ymax - ymin };
+      tut.lastFoundTarget = { ...tut.target };
+      tut.lostCount = 0;
+      tut.annotationState = "TRACKING";
+      trackingDot.classList.add("active");
+      trackingStatus.textContent = `Tracking: ${escapeHtml(msg.label || tut.currentTarget)}`;
+    } else {
+      tut.lostCount++;
+      if (tut.lostCount >= 3) {
+        tut.annotationState = "LOST";
+        trackingDot.classList.remove("active");
+        trackingStatus.textContent = "Object lost — searching…";
+        // Keep tut.target at last known position for smooth UX
+      } else {
+        tut.annotationState = "SEARCHING";
+        trackingStatus.textContent = "Searching…";
+      }
+    }
+  } else if (msg.type === "status") {
+    statusEl.textContent = msg.message;
+  } else if (msg.type === "reconnect_required") {
+    state.ws = null;
+    state.wsConnected = false;
+    statusEl.textContent = "Refreshing live connection…";
+    connectTrackingWebSocket();
+  }
+}
+
+// ── Fallback: legacy HTTP polling (used if WebSocket/Live API is unavailable) ─
+
+function startLegacyTrackingLoop() {
+  clearInterval(state.frameInterval);
 
   const poll = async () => {
     if (!tut.isRunning || !state.stream) return;
@@ -509,22 +662,12 @@ function startTrackingLoop() {
       });
       if (!res.ok) return;
       const data = await res.json();
-
-      if (data.found && data.box_2d) {
-        const [ymin, xmin, ymax, xmax] = data.box_2d;
-        if (xmax - xmin < 5 || ymax - ymin < 5) return;
-        tut.target = { x: xmin, y: ymin, w: xmax - xmin, h: ymax - ymin };
-        trackingDot.classList.add("active");
-        trackingStatus.textContent = `Tracking: ${escapeHtml(data.label || tut.currentTarget)}`;
-      } else {
-        trackingDot.classList.remove("active");
-        trackingStatus.textContent = "Searching…";
-      }
+      handleBackendMessage({ type: "annotation", ...data });
     } catch (e) { console.warn("poll:", e.message); }
   };
 
   poll();
-  tut.analysisInterval = setInterval(poll, 600);
+  state.frameInterval = setInterval(poll, 600);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -564,15 +707,23 @@ function startRenderLoop() {
     const pulse = 0.65 + 0.35 * Math.sin(t * Math.PI * 2);
     const glow  = 0.10 + 0.15 * Math.sin(t * Math.PI * 2 + 1);
 
+    // State-driven color: cyan=TRACKING, red=LOST, slate=SEARCHING/IDLE
+    const trackRGB = tut.annotationState === "TRACKING" ? "56, 189, 248"
+                   : tut.annotationState === "LOST"     ? "248, 113, 113"
+                   :                                      "148, 163, 184";
+    // Dim the overlay when lost so it's clearly a "ghost" position
+    const stateAlpha = tut.annotationState === "LOST" ? 0.45 : 1.0;
+
     overlayCtx.save();
+    overlayCtx.globalAlpha = stateAlpha;
 
     // Glow fill
-    overlayCtx.fillStyle = `rgba(56, 189, 248, ${glow})`;
+    overlayCtx.fillStyle = `rgba(${trackRGB}, ${glow})`;
     overlayCtx.fillRect(px, py, pw, ph);
 
     // Corner brackets
     const bLen = Math.min(pw * 0.22, ph * 0.22, 28);
-    overlayCtx.strokeStyle = `rgba(56, 189, 248, ${pulse})`;
+    overlayCtx.strokeStyle = `rgba(${trackRGB}, ${pulse})`;
     overlayCtx.lineWidth = 2.5;
     overlayCtx.lineCap   = "square";
     const corner = (cx, cy, dx, dy) => {
@@ -592,11 +743,11 @@ function startRenderLoop() {
     const sx = px - 36,     sy = py - 36;
     const angle = Math.atan2(cy - sy, cx - sx);
     const hl    = 11;
-    overlayCtx.strokeStyle = `rgba(56, 189, 248, ${pulse * 0.9})`;
+    overlayCtx.strokeStyle = `rgba(${trackRGB}, ${pulse * 0.9})`;
     overlayCtx.lineWidth   = 2;
     overlayCtx.lineCap     = "round";
     overlayCtx.beginPath(); overlayCtx.moveTo(sx, sy); overlayCtx.lineTo(cx, cy); overlayCtx.stroke();
-    overlayCtx.strokeStyle = `rgba(56, 189, 248, ${pulse})`;
+    overlayCtx.strokeStyle = `rgba(${trackRGB}, ${pulse})`;
     overlayCtx.beginPath();
     overlayCtx.moveTo(cx, cy);
     overlayCtx.lineTo(cx - hl * Math.cos(angle - Math.PI/7), cy - hl * Math.sin(angle - Math.PI/7));
@@ -625,9 +776,9 @@ function startRenderLoop() {
     overlayCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 5);
     overlayCtx.fill();
 
-    // Label (cyan)
+    // Label (state color)
     overlayCtx.font      = `bold ${fs}px system-ui, sans-serif`;
-    overlayCtx.fillStyle = `rgba(56, 189, 248, ${pulse})`;
+    overlayCtx.fillStyle = `rgba(${trackRGB}, ${pulse})`;
     overlayCtx.fillText(labelText, badgeX + 8, badgeY + fs + 4);
 
     // Action (amber)

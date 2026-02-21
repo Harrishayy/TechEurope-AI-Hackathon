@@ -1,14 +1,18 @@
 import os
 import base64
 import json
+import asyncio
+import time
+from dataclasses import dataclass
+from typing import List
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 
 load_dotenv()
 
@@ -16,8 +20,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("GEMINI_API_KEY not set in environment. Copy .env.example to .env and add your key.")
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.5-flash")
+live_client = genai.Client(api_key=GEMINI_API_KEY)
+REST_MODEL = "gemini-2.5-flash"
+LIVE_MODEL = "gemini-2.0-flash-live-001"
 
 app = FastAPI(title="Camera Annotation API")
 
@@ -182,29 +187,237 @@ Respond ONLY with a single valid JSON object — no markdown, no code fences.
 Do not include any text outside the JSON object."""
 
 
-# ── Endpoint — registered BEFORE the static file mount ───────────────────────
+# ── Live API prompt builders ──────────────────────────────────────────────────
+
+def build_live_system_prompt() -> str:
+    return """You are a computer vision assistant embedded in a real-time tutorial system.
+
+You will receive a continuous stream of camera frames from a user's device.
+Your ONLY task is to locate a specified physical component in each frame and return its bounding box.
+
+Output format — you MUST respond ONLY with a single valid JSON object, no markdown fences, no prose:
+{
+  "found": <true or false>,
+  "label": "<component name or empty string>",
+  "box_2d": [ymin, xmin, ymax, xmax],
+  "confidence": <0.0 to 1.0>
+}
+
+Rules:
+- box_2d values are integers normalized 0-1000 (0 = top/left, 1000 = bottom/right)
+- box_2d order is strictly [ymin, xmin, ymax, xmax]
+- If you cannot confidently locate the target, set found=false and box_2d=[0,0,0,0]
+- Return exactly ONE JSON object per response — no additional text
+- Do not describe the scene, do not explain your reasoning"""
+
+
+def _build_step_context_message(target: str, instruction: str, hint: str) -> str:
+    hint_clause = f"\nSpatial hint: {hint}" if hint.strip() else ""
+    return (
+        f"NEW STEP STARTED. Tutorial step: {instruction}\n"
+        f"Target component to locate: {target}{hint_clause}\n"
+        f"Watch the incoming camera frames and locate \"{target}\".\n"
+        f"Respond to each frame with a single JSON object as specified."
+    )
+
+
+def _build_reinforcement_prompt(target: str, hint: str) -> str:
+    hint_clause = f" Hint: {hint}" if hint.strip() else ""
+    return f"Locate \"{target}\" in the next frame.{hint_clause} Respond with JSON only."
+
+
+# ── Live API session state ────────────────────────────────────────────────────
+
+@dataclass
+class SessionState:
+    session_id: str
+    live_session: object
+    target_object: str = ""
+    step_instruction: str = ""
+    hint: str = ""
+    frame_count: int = 0
+    last_frame_time: float = 0.0
+    json_accumulator: str = ""
+    is_active: bool = True
+
+
+_sessions: dict = {}
+
+
+# ── WebSocket proxy coroutines ────────────────────────────────────────────────
+
+async def _browser_to_gemini(websocket: WebSocket, session_state: SessionState):
+    """Reads frames/step messages from the browser and forwards to the Gemini Live session."""
+    FRAME_INTERVAL = 1.0  # seconds — rate-gate to ~1 fps
+
+    async for raw_msg in websocket.iter_text():
+        if not session_state.is_active:
+            break
+        try:
+            msg = json.loads(raw_msg)
+        except json.JSONDecodeError:
+            continue
+
+        msg_type = msg.get("type")
+
+        if msg_type == "frame":
+            now = time.monotonic()
+            if now - session_state.last_frame_time < FRAME_INTERVAL:
+                continue  # drop frame — rate limiting
+            session_state.last_frame_time = now
+            session_state.frame_count += 1
+
+            if not session_state.target_object:
+                continue  # nothing to track yet
+
+            frame_bytes = base64.b64decode(msg["data"])
+            await session_state.live_session.send_realtime_input(
+                video=genai_types.Blob(data=frame_bytes, mime_type="image/jpeg")
+            )
+
+            # Every 5 frames reinforce the instruction so the model stays focused
+            if session_state.frame_count % 5 == 1:
+                reinforcement = _build_reinforcement_prompt(
+                    session_state.target_object, session_state.hint
+                )
+                await session_state.live_session.send_client_content(
+                    turns=genai_types.Content(
+                        role="user",
+                        parts=[genai_types.Part(text=reinforcement)],
+                    ),
+                    turn_complete=True,
+                )
+
+        elif msg_type == "step":
+            session_state.target_object    = msg.get("target_object", "")
+            session_state.step_instruction = msg.get("step_instruction", "")
+            session_state.hint             = msg.get("hint", "")
+            session_state.frame_count      = 0
+            session_state.json_accumulator = ""
+
+            context_msg = _build_step_context_message(
+                session_state.target_object,
+                session_state.step_instruction,
+                session_state.hint,
+            )
+            await session_state.live_session.send_client_content(
+                turns=genai_types.Content(
+                    role="user",
+                    parts=[genai_types.Part(text=context_msg)],
+                ),
+                turn_complete=True,
+            )
+
+        elif msg_type == "stop":
+            session_state.is_active = False
+            break
+
+
+async def _gemini_to_browser(websocket: WebSocket, session_state: SessionState):
+    """Reads streaming chunks from Gemini Live, assembles JSON, and pushes annotations to browser."""
+    async for response in session_state.live_session.receive():
+        if not session_state.is_active:
+            break
+
+        server_content = getattr(response, "server_content", None)
+        if server_content is None:
+            continue
+
+        model_turn = getattr(server_content, "model_turn", None)
+        if model_turn:
+            for part in getattr(model_turn, "parts", []):
+                text_chunk = getattr(part, "text", None)
+                if text_chunk:
+                    session_state.json_accumulator += text_chunk
+
+        if getattr(server_content, "turn_complete", False):
+            raw = session_state.json_accumulator.strip()
+            session_state.json_accumulator = ""
+
+            if not raw:
+                continue
+
+            # Strip markdown fences if model wraps output despite instruction
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                raw = "\n".join(lines[1:]).rsplit("```", 1)[0].strip()
+
+            try:
+                parsed = json.loads(raw)
+                annotation = {
+                    "type":       "annotation",
+                    "found":      bool(parsed.get("found", False)),
+                    "label":      parsed.get("label", ""),
+                    "box_2d":     parsed.get("box_2d", [0, 0, 0, 0]),
+                    "confidence": float(parsed.get("confidence", 0.0)),
+                }
+                await websocket.send_text(json.dumps(annotation))
+            except Exception:
+                await websocket.send_text(json.dumps({"type": "status", "message": "searching"}))
+
+
+# ── WebSocket endpoint — registered BEFORE the static file mount ──────────────
+
+@app.websocket("/ws/track/{session_id}")
+async def websocket_track(websocket: WebSocket, session_id: str):
+    await websocket.accept()
+
+    live_config = genai_types.LiveConnectConfig(
+        response_modalities=[genai_types.Modality.TEXT],
+        system_instruction=build_live_system_prompt(),
+    )
+
+    try:
+        async with live_client.aio.live.connect(model=LIVE_MODEL, config=live_config) as live_session:
+            session_state = SessionState(session_id=session_id, live_session=live_session)
+            _sessions[session_id] = session_state
+
+            sender_task   = asyncio.create_task(_browser_to_gemini(websocket, session_state))
+            receiver_task = asyncio.create_task(_gemini_to_browser(websocket, session_state))
+
+            try:
+                await asyncio.gather(sender_task, receiver_task)
+            except (WebSocketDisconnect, asyncio.CancelledError):
+                pass
+            finally:
+                sender_task.cancel()
+                receiver_task.cancel()
+                session_state.is_active = False
+
+        # Signal the client to reconnect (e.g. 2-minute session limit reached)
+        try:
+            await websocket.send_text(json.dumps({"type": "reconnect_required", "reason": "session_expired"}))
+        except Exception:
+            pass
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_text(json.dumps({"type": "status", "message": f"stream error: {str(e)}"}))
+        except Exception:
+            pass
+    finally:
+        _sessions.pop(session_id, None)
+
+
+# ── REST endpoints — registered BEFORE the static file mount ─────────────────
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest):
-    # Validate base64
     try:
-        base64.b64decode(request.image)
+        image_bytes = base64.b64decode(request.image)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 image data")
 
-    image_part = {
-        "inline_data": {
-            "mime_type": "image/jpeg",
-            "data": request.image,
-        }
-    }
-
+    image_part  = genai_types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
     prompt_text = build_prompt(request.prompt)
 
     try:
-        response = model.generate_content(
-            [prompt_text, image_part],
-            generation_config=genai.types.GenerationConfig(
+        response = await live_client.aio.models.generate_content(
+            model=REST_MODEL,
+            contents=[prompt_text, image_part],
+            config=genai_types.GenerateContentConfig(
                 temperature=0.1,
                 max_output_tokens=2048,
                 response_mime_type="application/json",
@@ -218,8 +431,8 @@ async def analyze(request: AnalyzeRequest):
     # Defensive: strip markdown fences if Gemini ignores the instruction
     if raw_text.startswith("```"):
         lines = raw_text.split("\n")
-        raw_text = "\n".join(lines[1:])          # drop first line (```json or ```)
-        raw_text = raw_text.rsplit("```", 1)[0]  # drop trailing fence
+        raw_text = "\n".join(lines[1:])
+        raw_text = raw_text.rsplit("```", 1)[0]
         raw_text = raw_text.strip()
 
     try:
@@ -247,17 +460,11 @@ async def analyze(request: AnalyzeRequest):
 @app.post("/analyze-step", response_model=StepBoundingBox)
 async def analyze_step(request: StepAnalyzeRequest):
     try:
-        base64.b64decode(request.image)
+        image_bytes = base64.b64decode(request.image)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 image data")
 
-    image_part = {
-        "inline_data": {
-            "mime_type": "image/jpeg",
-            "data": request.image,
-        }
-    }
-
+    image_part  = genai_types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
     prompt_text = build_step_prompt(
         request.target_object,
         request.step_instruction,
@@ -265,9 +472,10 @@ async def analyze_step(request: StepAnalyzeRequest):
     )
 
     try:
-        response = model.generate_content(
-            [prompt_text, image_part],
-            generation_config=genai.types.GenerationConfig(
+        response = await live_client.aio.models.generate_content(
+            model=REST_MODEL,
+            contents=[prompt_text, image_part],
+            config=genai_types.GenerateContentConfig(
                 temperature=0.1,
                 max_output_tokens=256,
                 response_mime_type="application/json",
@@ -310,9 +518,10 @@ async def generate_step(request: GenerateStepRequest):
     prompt_text = build_generate_step_prompt(request.topic, request.completed_steps)
 
     try:
-        response = model.generate_content(
-            prompt_text,
-            generation_config=genai.types.GenerationConfig(
+        response = await live_client.aio.models.generate_content(
+            model=REST_MODEL,
+            contents=prompt_text,
+            config=genai_types.GenerateContentConfig(
                 temperature=0.3,
                 max_output_tokens=512,
                 response_mime_type="application/json",
