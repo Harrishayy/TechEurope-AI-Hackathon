@@ -8,44 +8,86 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="extract-container">
-    <div class="page-header">
-      <a href="index.html" class="back-btn" aria-label="Back">&larr;</a>
-      <h1>Create SOP</h1>
-    </div>
+  <div class="extract-wrapper">
+    <div class="extract-container">
+      <!-- Header (baseui) -->
+      <div class="extract-header">
+        <a href="index.html" class="back-btn" id="back-btn" aria-label="Back">&larr;</a>
+        <h1>Create SOP</h1>
+      </div>
 
-    <div id="msg" class="msg"></div>
+      <div id="msg" class="msg" role="alert"></div>
 
-    <div class="form-group">
-      <label for="contentInput">Training Content</label>
-      <textarea
-        id="contentInput"
-        placeholder="Paste a YouTube transcript, training manual excerpt, or any step-by-step procedure description here...
+      <div class="extract-form">
+        <div class="form-group">
+          <label for="sourceMode">Input Source</label>
+          <select id="sourceMode" class="input-control input-select">
+            <option value="text">Text / Transcript</option>
+            <option value="live">Live Camera Recording</option>
+            <option value="video">Pre-recorded Video</option>
+          </select>
+        </div>
 
-Example: 'First, remove the portafilter from the machine. Knock out any old grounds. Then flush the group head briefly with hot water...'"
-      ></textarea>
-    </div>
+        <div id="textSection" class="form-group">
+          <label for="contentInput">Training Content</label>
+          <textarea id="contentInput" placeholder="Paste a transcript, manual excerpt, SOP notes, or procedure steps..."></textarea>
+        </div>
 
-    <button id="generateBtn" class="btn btn-primary">Generate SOP</button>
+        <div id="videoSection" class="form-group hidden">
+          <label for="videoFile">Upload Video</label>
+          <input id="videoFile" class="input-control input-file" type="file" accept="video/*">
+          <p class="hint">Use a short clip (30–90s) for fastest results.</p>
+        </div>
 
-    <div id="spinner" class="spinner">
-      <span class="dot"></span>
-      <span class="dot"></span>
-      <span class="dot"></span>
-      <p class="mt-1" style="font-size:0.85rem;">Analyzing content and building your SOP...</p>
-    </div>
+        <div id="liveSection" class="form-group hidden">
+          <label>Live Camera Recording</label>
+          <div id="livePreviewWrap" class="live-preview-container hidden">
+            <video id="livePreview" class="live-preview-video" autoplay muted playsinline></video>
+            <div id="recordingBadge" class="recording-badge hidden" aria-live="polite">
+              <span class="recording-dot"></span>
+              <span id="recordTimer" class="record-timer">00:00</span>
+            </div>
+          </div>
+          <div class="record-controls">
+            <button id="startRecordBtn" class="btn btn-primary btn-record" type="button">Start Recording</button>
+            <button id="stopRecordBtn" class="btn btn-secondary btn-record" type="button" disabled>Stop</button>
+          </div>
+          <p id="recordStatus" class="hint">Record 30–60 seconds, then generate SOP.</p>
+          <div id="recordedPreviewWrap" class="recorded-preview-wrap hidden">
+            <video id="recordedPreview" class="live-preview-video" controls playsinline></video>
+          </div>
+        </div>
 
-    <div id="sopPreview" class="sop-preview">
-      <h2 id="sopTitle">Generated SOP</h2>
-      <div id="sopSteps"></div>
-      <div class="sop-actions">
-        <button id="editSop" class="btn btn-secondary">Edit</button>
-        <button id="startCoaching" class="btn btn-primary">Start Coaching</button>
+        <div class="form-group">
+          <label for="contextInput">Extra Context (optional)</label>
+          <textarea id="contextInput" placeholder="Add role, tooling context, safety notes, or quality rules." rows="3"></textarea>
+        </div>
+
+        <button id="generateBtn" class="btn btn-primary btn-generate">Generate SOP</button>
+
+        <div id="spinner" class="spinner">
+          <div class="spinner-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+          <p class="spinner-text">Analyzing content and building your SOP...</p>
+        </div>
+
+        <div id="sopPreview" class="sop-preview">
+          <h2 id="sopTitle">Generated SOP</h2>
+          <p id="sopRole" class="sop-role hidden"></p>
+          <div id="sopSteps" class="sop-steps"></div>
+          <div class="sop-actions">
+            <button id="editSop" class="btn btn-secondary">Edit</button>
+            <button id="saveSop" class="btn btn-primary">Save SOP</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <script src="js/gemini.js"></script>
-  <script src="js/extract.js"></script>
+  <script src="js/sop/extract.js"></script>
 </body>
 </html>
