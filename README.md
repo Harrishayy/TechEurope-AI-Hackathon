@@ -10,7 +10,17 @@ A futuristic heads-up display overlaid on your live camera feed. Iron Man meets 
 npm run dev
 ```
 
+For Dust-backed SOP generation, set these environment variables before running:
+
+```bash
+DUST_WORKSPACE_ID=your_workspace_id
+DUST_AGENT_ID=your_agent_configuration_id
+DUST_API_KEY=your_dust_api_key
+```
+
 Open [http://localhost:8080/hud.html](http://localhost:8080/hud.html) — tap **INITIALIZE SYSTEM**, allow camera access, and watch the boot sequence.
+
+SkillLens SOP flow is available at [http://localhost:8080/extract.html](http://localhost:8080/extract.html) and uses `POST /api/sop/generate`.
 
 For mobile testing, open `http://<your-local-ip>:8080/hud.html` on your phone (same Wi-Fi network).
 

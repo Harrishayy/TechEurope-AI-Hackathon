@@ -4,7 +4,7 @@
   "private": true,
   "description": "Futuristic tactical HUD overlay on live camera feed",
   "scripts": {
-    "dev": "npx serve . -l 8080 --no-clipboard",
-    "start": "npx serve . -l 8080 --no-clipboard"
+    "dev": "node server.js",
+    "start": "node server.js"
   }
 }

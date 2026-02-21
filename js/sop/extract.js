@@ -24,7 +24,6 @@
   const spinner = document.getElementById('spinner');
   const msgEl = document.getElementById('msg');
   const sopPreview = document.getElementById('sopPreview');
-  const sopRole = document.getElementById('sopRole');
   const sopSteps = document.getElementById('sopSteps');
   const sopTitle = document.getElementById('sopTitle');
   const saveBtn = document.getElementById('saveSop');
@@ -49,17 +48,10 @@
   editBtn.addEventListener('click', editGeneratedSop);
   startRecordBtn.addEventListener('click', startRecording);
   stopRecordBtn.addEventListener('click', stopRecording);
-  msgEl.addEventListener('click', hideMsg);
 
   updateModeUI();
 
   async function handleGenerate() {
-    const apiKey = localStorage.getItem('skilllens_api_key');
-    if (!apiKey) {
-      showMsg('No API key found. Go back to the home page and set your Gemini key.', 'error');
-      return;
-    }
-
     const mode = sourceMode.value;
     const context = (contextInput.value || '').trim();
 
@@ -70,13 +62,17 @@
     if (coachingLink) coachingLink.style.display = 'none';
 
     try {
-      const client = new GeminiClient(apiKey);
       let sop;
 
       if (mode === 'text') {
         const content = (contentInput.value || '').trim();
         if (!content) throw new Error('Please paste some training content first.');
-        sop = await generateFromText(client, content, context);
+        sop = await generateViaBackend({
+          mode,
+          text: content,
+          context,
+          accountId: getAccountId()
+        });
       } else if (mode === 'video') {
         const file = videoFileInput.files[0];
         if (!file) throw new Error('Please upload a video file first.');
@@ -85,7 +81,12 @@
         const frames = await sampleVideoFramesFromBlob(file);
         if (!frames.length) throw new Error('Could not extract frames from this video.');
 
-        sop = await generateFromFrames(client, frames, context, 'pre-recorded video');
+        sop = await generateViaBackend({
+          mode,
+          frames,
+          context,
+          accountId: getAccountId()
+        });
       } else {
         if (!recordedBlob && !liveCapturedFrames.length) {
           throw new Error('Record a live clip first, then generate SOP.');
@@ -98,7 +99,12 @@
         }
         if (!frames.length) throw new Error('Could not extract frames from the recorded clip.');
 
-        sop = await generateFromFrames(client, frames, context, 'live camera recording');
+        sop = await generateViaBackend({
+          mode,
+          frames,
+          context,
+          accountId: getAccountId()
+        });
       }
 
       generatedSOP = normalizeSOP(sop);
@@ -116,77 +122,22 @@
     }
   }
 
-  async function generateFromText(client, content, context) {
-    const systemPrompt = `You are an expert at creating Standard Operating Procedures (SOPs) for physical, hands-on trades.
+  async function generateViaBackend(payload) {
+    const res = await fetch('/api/sop/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-Convert the user's training content into a structured SOP.
-
-Output a JSON object with this EXACT structure and nothing else:
-{
-  "title": "Name of the procedure",
-  "role": "job role (e.g., barista, electrician, warehouse operator)",
-  "steps": [
-    {
-      "step": 1,
-      "action": "Clear, concise instruction for what to do",
-      "look_for": "Visual cue that confirms this step is being performed correctly",
-      "common_mistakes": "What could go wrong at this step"
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'SOP generation failed.');
     }
-  ]
-}
 
-Rules:
-- Each step should be a single physical action
-- Keep action descriptions under 15 words
-- Include 6-15 steps
-- Order steps chronologically
-- Return ONLY the JSON object`;
-
-    const userPrompt = `Convert this training content into an SOP.\n\nContext: ${context || 'None'}\n\nContent:\n${content}`;
-    const result = await client.generateText(systemPrompt, userPrompt, { temperature: 0.3, maxTokens: 2500 });
-    return parseSOP(result);
-  }
-
-  async function generateFromFrames(client, frames, context, sourceName) {
-    const systemPrompt = `You are an expert operations trainer.
-
-You receive sequential video frames of a person performing a task.
-Infer the most likely workflow and output a structured SOP.
-
-Output a JSON object with this EXACT structure and nothing else:
-{
-  "title": "Name of the procedure",
-  "role": "job role",
-  "steps": [
-    {
-      "step": 1,
-      "action": "Clear physical action",
-      "look_for": "Observable visual confirmation",
-      "common_mistakes": "Likely error"
+    if (!data.sop || typeof data.sop !== 'object') {
+      throw new Error('Invalid SOP response from server.');
     }
-  ]
-}
-
-Rules:
-- Use only what can be inferred from the frames
-- Keep actions concrete and physically observable
-- Include 6-12 steps when possible
-- Return ONLY JSON`;
-
-    const userPrompt = `These frames are in chronological order from a ${sourceName}. Build the SOP from what is visible.\nAdditional context: ${context || 'None'}.`;
-    const result = await client.analyzeImages(systemPrompt, userPrompt, frames, { temperature: 0.3, maxTokens: 2500 });
-    return parseSOP(result);
-  }
-
-  function parseSOP(text) {
-    const clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    try {
-      return JSON.parse(clean);
-    } catch {
-      const match = clean.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error('AI response was not valid JSON.');
-      return JSON.parse(match[0]);
-    }
+    return data.sop;
   }
 
   function normalizeSOP(sop) {
@@ -434,31 +385,16 @@ Rules:
 
   function renderSOP(sop) {
     sopTitle.textContent = sop.title || 'Generated SOP';
-    if (sopRole) {
-      if (sop.role) {
-        sopRole.textContent = `Role: ${sop.role}`;
-        sopRole.classList.remove('hidden');
-      } else {
-        sopRole.textContent = '';
-        sopRole.classList.add('hidden');
-      }
-    }
     sopSteps.innerHTML = '';
 
     sop.steps.forEach((s) => {
       const div = document.createElement('div');
       div.className = 'sop-step';
-      let html = `
-        <span class="sop-step-num">Step ${s.step}</span>
-        <p class="sop-step-action">${escapeHtml(s.action)}</p>
+      div.innerHTML = `
+        <div class="sop-step-num">Step ${s.step}</div>
+        <div class="sop-step-action">${escapeHtml(s.action)}</div>
+        <div class="sop-step-detail">Look for: ${escapeHtml(s.look_for || '-')}</div>
       `;
-      if (s.look_for) {
-        html += `<p class="sop-step-detail">Look for: ${escapeHtml(s.look_for)}</p>`;
-      }
-      if (s.common_mistakes) {
-        html += `<p class="sop-step-mistakes">⚠ ${escapeHtml(s.common_mistakes)}</p>`;
-      }
-      div.innerHTML = html;
       sopSteps.appendChild(div);
     });
   }

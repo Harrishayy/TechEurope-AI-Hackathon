@@ -14,6 +14,8 @@
 
   const extractCard = document.getElementById('extractCard');
   if (extractCard) {
+    extractCard.addEventListener('click', () => {
+      showStatus('SOP generation uses server-side Dust configuration', 'saved');
     extractCard.addEventListener('click', (e) => {
       const key = localStorage.getItem('skilllens_api_key');
       if (!key) {
