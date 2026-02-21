@@ -63,13 +63,18 @@ This project is a hackathon submission focused on proving product value quickly 
 
 ---
 
+## THE LAW: Tailwind Only, No Raw CSS
+
+**This is non-negotiable.** All styling in this project MUST use Tailwind CSS utility classes. No inline `<style>` blocks, no `.css` files, no CSS Modules, no styled-components, no raw CSS of any kind. If it can be expressed as a Tailwind class, it must be. Custom values use Tailwind's arbitrary value syntax (e.g. `bg-[#00f0ff]`, `text-[9px]`). Complex animations use `@keyframes` defined in `tailwind.config.js` under `theme.extend.animation` and `theme.extend.keyframes` — never in a `<style>` tag. Every developer, every file, every time. No exceptions.
+
+---
+
 ## 5) Recommended Tech Stack (Beginner-Friendly)
 
 ### Frontend
 - **Framework:** Next.js (App Router)
 - **Language:** TypeScript
-- **Styling (default):** CSS Modules + global CSS (plain CSS)
-- **Styling (optional):** Tailwind CSS only if team explicitly prefers utility-first workflow
+- **Styling:** Tailwind CSS (mandatory — see THE LAW above)
 - **State/Data:** React Query for server state; simple local state with React hooks
 
 ### Backend
@@ -88,11 +93,7 @@ This project is a hackathon submission focused on proving product value quickly 
 - TypeScript end-to-end reduces context-switching for beginners.
 - Next.js has strong docs, easy local dev, and straightforward deployment.
 - NestJS provides backend structure out-of-the-box (modules/controllers/services), which helps junior developers avoid ad-hoc architecture.
-- Plain CSS keeps the migration close to the current codebase, lowers abstraction overhead for new contributors, and avoids adding another required styling framework.
-
-### Styling decision for this team
-- Start with **normal CSS** (CSS Modules + shared global stylesheet) as the default for beginner onboarding.
-- Revisit Tailwind in a later ADR if the team starts building a large shared design system and wants utility-class speed.
+- Tailwind CSS provides utility-first styling that keeps styles co-located with markup, eliminates naming debates, and keeps the codebase consistent.
 
 ---
 
