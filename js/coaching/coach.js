@@ -1,4 +1,4 @@
-// SkillLens — Two-Phase Coaching Engine (Identify → Track)
+// FOV — Two-Phase Coaching Engine (Identify → Track)
 
 (function () {
   const video = document.getElementById('camera');
@@ -78,7 +78,7 @@
       canvas.width = Math.round(vw * scale);
       canvas.height = Math.round(vh * scale);
 
-      console.log(`[SkillLens] Camera: ${vw}x${vh} → Capture: ${canvas.width}x${canvas.height}`);
+      console.log(`[FOV] Camera: ${vw}x${vh} → Capture: ${canvas.width}x${canvas.height}`);
 
       if (steps.length > 0) {
         setStatus('Loaded SOP. Tap Start to track progress.');
@@ -109,8 +109,8 @@
   const LIVE_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
   // Models to try in order — first one that connects wins
   const LIVE_MODELS = [
+    'models/gemini-2.5-flash-native-audio-preview-12-2025',
     'models/gemini-2.0-flash-live-001',
-    'models/gemini-2.0-flash-exp',
   ];
 
   let liveSocket = null;
@@ -151,7 +151,7 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
         }
       });
     } catch (err) {
-      console.warn('[SkillLens] Mic access failed:', err);
+      console.warn('[FOV] Mic access failed:', err);
       if (err.name === 'NotAllowedError' && micIndicator) {
         micIndicator.classList.add('denied');
       }
@@ -160,48 +160,8 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
       return;
     }
 
-    // Try Live API first
-    try {
-      audioContext = new AudioContext({ sampleRate: 16000 });
-
-      const workletCode = `
-        class PCMProcessor extends AudioWorkletProcessor {
-          constructor() {
-            super();
-            this._buffer = [];
-            this._bufferSize = 2048;
-          }
-          process(inputs) {
-            const input = inputs[0];
-            if (!input || !input[0]) return true;
-            const samples = input[0];
-            for (let i = 0; i < samples.length; i++) {
-              this._buffer.push(samples[i]);
-            }
-            if (this._buffer.length >= this._bufferSize) {
-              const pcm16 = new Int16Array(this._buffer.length);
-              for (let i = 0; i < this._buffer.length; i++) {
-                const s = Math.max(-1, Math.min(1, this._buffer[i]));
-                pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-              }
-              this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
-              this._buffer = [];
-            }
-            return true;
-          }
-        }
-        registerProcessor('pcm-processor', PCMProcessor);
-      `;
-      const blob = new Blob([workletCode], { type: 'application/javascript' });
-      const workletUrl = URL.createObjectURL(blob);
-      await audioContext.audioWorklet.addModule(workletUrl);
-      URL.revokeObjectURL(workletUrl);
-
-      connectLiveApi(apiKey);
-    } catch (err) {
-      console.warn('[SkillLens] AudioWorklet init failed, using fallback:', err);
-      initFallbackVoice();
-    }
+    // Use Web Speech API + Gemini REST for voice command classification
+    initFallbackVoice();
   }
 
   function connectLiveApi(apiKey) {
@@ -210,11 +170,11 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
 
     const modelName = LIVE_MODELS[liveModelIndex] || LIVE_MODELS[0];
     const url = `${LIVE_WS_URL}?key=${apiKey}`;
-    console.log(`[SkillLens] Trying Live API with ${modelName}...`);
+    console.log(`[FOV] Trying Live API with ${modelName}...`);
     liveSocket = new WebSocket(url);
 
     liveSocket.onopen = () => {
-      console.log('[SkillLens] Live API WebSocket open, sending setup...');
+      console.log('[FOV] Live API WebSocket open, sending setup...');
       const setup = {
         setup: {
           model: modelName,
@@ -234,7 +194,7 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
         const msg = JSON.parse(event.data);
 
         if (msg.setupComplete) {
-          console.log('[SkillLens] Live API ready — streaming audio');
+          console.log('[FOV] Live API ready — streaming audio');
           voiceMode = 'live';
           liveFailCount = 0;
           if (micIndicator) micIndicator.classList.add('active');
@@ -247,7 +207,7 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
           for (const part of parts) {
             if (part.text) {
               const action = part.text.trim().toLowerCase().replace(/[^a-z]/g, '');
-              console.log(`[SkillLens] Live API: "${part.text.trim()}" → ${action}`);
+              console.log(`[FOV] Live API: "${part.text.trim()}" → ${action}`);
               if (action && action !== 'none') {
                 executeVoiceCommand(action);
                 flashMic(action);
@@ -255,21 +215,21 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
             }
           }
           if (msg.serverContent.inputTranscription?.text) {
-            console.log(`[SkillLens] Heard: "${msg.serverContent.inputTranscription.text}"`);
+            console.log(`[FOV] Heard: "${msg.serverContent.inputTranscription.text}"`);
             if (transcriptText) transcriptText.textContent = msg.serverContent.inputTranscription.text;
           }
         }
       } catch (err) {
-        console.warn('[SkillLens] Live API parse error:', err);
+        console.warn('[FOV] Live API parse error:', err);
       }
     };
 
     liveSocket.onerror = (err) => {
-      console.warn('[SkillLens] Live API WebSocket error:', err);
+      console.warn('[FOV] Live API WebSocket error:', err);
     };
 
     liveSocket.onclose = (event) => {
-      console.log(`[SkillLens] Live API disconnected (code: ${event.code}, reason: "${event.reason}")`);
+      console.log(`[FOV] Live API disconnected (code: ${event.code}, reason: "${event.reason}")`);
       if (micIndicator) micIndicator.classList.remove('active');
       stopAudioStreaming();
 
@@ -280,14 +240,14 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
       // If this model failed, try the next one
       if (liveFailCount <= 2 && liveModelIndex < LIVE_MODELS.length - 1) {
         liveModelIndex++;
-        console.log(`[SkillLens] Trying next model: ${LIVE_MODELS[liveModelIndex]}`);
+        console.log(`[FOV] Trying next model: ${LIVE_MODELS[liveModelIndex]}`);
         setTimeout(() => connectLiveApi(apiKey), 500);
         return;
       }
 
       // If we've exhausted models and retries, switch to fallback
       if (liveFailCount >= MAX_LIVE_FAILURES) {
-        console.log('[SkillLens] Live API failed — switching to Web Speech + Gemini REST fallback');
+        console.log('[FOV] Live API failed — switching to Web Speech + Gemini REST fallback');
         initFallbackVoice();
         return;
       }
@@ -349,12 +309,12 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      console.warn('[SkillLens] No speech recognition available');
+      console.warn('[FOV] No speech recognition available');
       if (micIndicator) micIndicator.classList.add('unsupported');
       return;
     }
 
-    console.log('[SkillLens] Using fallback: Web Speech API + Gemini REST');
+    console.log('[FOV] Using fallback: Web Speech API + Gemini REST');
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
@@ -374,7 +334,7 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
     };
 
     recognition.onerror = (event) => {
-      console.warn('[SkillLens] Speech error:', event.error);
+      console.warn('[FOV] Speech error:', event.error);
       if (event.error === 'not-allowed') {
         if (micIndicator) micIndicator.classList.add('denied');
         return;
@@ -391,7 +351,7 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
         if (!event.results[i].isFinal) continue;
         const transcript = event.results[i][0].transcript.trim();
         if (transcript.length < 2) continue;
-        console.log(`[SkillLens] Heard: "${transcript}"`);
+        console.log(`[FOV] Heard: "${transcript}"`);
         if (transcriptText) transcriptText.textContent = transcript;
         classifyWithGemini(transcript);
       }
@@ -420,7 +380,7 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
       for (const entry of quickMap) {
         for (const w of entry.words) {
           if (t.includes(w)) {
-            console.log(`[SkillLens] Quick match: "${transcript}" → ${entry.action}`);
+            console.log(`[FOV] Quick match: "${transcript}" → ${entry.action}`);
             executeVoiceCommand(entry.action);
             flashMic(entry.action);
             return;
@@ -459,17 +419,112 @@ RESPOND WITH ONE WORD ONLY: skip, done, start, pause, resume, reset, or none.`,
       );
 
       const action = response.trim().toLowerCase().replace(/[^a-z]/g, '');
-      console.log(`[SkillLens] Gemini classified: "${transcript}" → ${action}`);
+      console.log(`[FOV] Gemini classified: "${transcript}" → ${action}`);
 
       if (action && action !== 'none') {
         executeVoiceCommand(action);
         flashMic(action);
       }
     } catch (err) {
-      console.warn('[SkillLens] Classification error:', err);
+      console.warn('[FOV] Classification error:', err);
     } finally {
       fallbackProcessing = false;
     }
+  }
+
+  // ── Gemini Audio REST API voice commands ──
+
+  let geminiAudioRecorder = null;
+  let geminiAudioChunks = [];
+  let geminiAudioProcessing = false;
+  const AUDIO_CHUNK_DURATION = 3000; // ms per clip
+
+  function initGeminiAudioVoice() {
+    if (!micStream) {
+      initFallbackVoice();
+      return;
+    }
+
+    const mimeTypes = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+    ];
+    const mimeType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+    try {
+      geminiAudioRecorder = new MediaRecorder(micStream, mimeType ? { mimeType } : {});
+    } catch (err) {
+      console.warn('[FOV] MediaRecorder init failed, using Web Speech fallback:', err);
+      initFallbackVoice();
+      return;
+    }
+
+    geminiAudioRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) geminiAudioChunks.push(e.data);
+    };
+
+    geminiAudioRecorder.onstop = async () => {
+      if (geminiAudioChunks.length === 0) return;
+      const blob = new Blob(geminiAudioChunks, { type: geminiAudioRecorder.mimeType });
+      geminiAudioChunks = [];
+      await classifyAudioWithGemini(blob);
+    };
+
+    function recordLoop() {
+      if (!isRunning) return;
+      geminiAudioChunks = [];
+      try {
+        geminiAudioRecorder.start();
+        setTimeout(() => {
+          if (geminiAudioRecorder.state === 'recording') {
+            geminiAudioRecorder.stop();
+          }
+          setTimeout(recordLoop, 200);
+        }, AUDIO_CHUNK_DURATION);
+      } catch (err) {
+        console.warn('[FOV] Audio record loop error:', err);
+        setTimeout(recordLoop, 1000);
+      }
+    }
+
+    voiceMode = 'gemini-audio';
+    if (micIndicator) micIndicator.classList.add('active');
+    console.log('[FOV] Using Gemini audio REST API for voice commands');
+    recordLoop();
+  }
+
+  async function classifyAudioWithGemini(blob) {
+    if (geminiAudioProcessing || !client) return;
+    geminiAudioProcessing = true;
+
+    try {
+      const base64 = await blobToBase64(blob);
+      const mimeType = blob.type.split(';')[0]; // strip codec params for Gemini
+      const response = await client.analyzeAudio(buildClassifierPrompt(), base64, mimeType);
+      const action = response.trim().toLowerCase().replace(/[^a-z]/g, '');
+      console.log(`[FOV] Gemini audio: "${response.trim()}" → ${action}`);
+
+      if (action && action !== 'none') {
+        if (transcriptText) transcriptText.textContent = action;
+        executeVoiceCommand(action);
+        flashMic(action);
+      }
+    } catch (err) {
+      console.warn('[FOV] Gemini audio classify error:', err);
+    } finally {
+      geminiAudioProcessing = false;
+    }
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
   // ── Shared voice execution ──
@@ -552,7 +607,7 @@ RESPOND WITH ONE WORD ONLY: skip, done, start, pause, resume, reset, or none.`,
 
     try {
       const response = await client.analyzeImage(
-        `You are SkillLens, a vision AI that identifies objects and generates step-by-step instructions.
+        `You are FOV, a vision AI that identifies objects and generates step-by-step instructions.
 
 Look at this image. Identify the main object, product, or piece of equipment visible.
 Then generate a clear, practical set of 4–8 steps for how to use or interact with it.
@@ -593,7 +648,7 @@ Rules:
         renderSteps();
         updateBadge();
         updateButton();
-        console.log(`[SkillLens] Identified: ${parsed.object}, ${steps.length} steps`);
+        console.log(`[FOV] Identified: ${parsed.object}, ${steps.length} steps`);
       } else {
         setStatus('Can\'t identify — move closer or adjust the angle, then tap Start.');
       }
@@ -676,7 +731,7 @@ Rules:
       const currentStepLookFor = steps[currentStep] ? steps[currentStep].look_for : '';
 
       const response = await client.analyzeImage(
-        `You are SkillLens, a vision AI coach tracking a user's progress through a checklist.
+        `You are FOV, a vision AI coach tracking a user's progress through a checklist.
 
 Here is the current step checklist:
 ${stepList}
@@ -709,7 +764,7 @@ Rules:
       consecutiveErrors = 0;
 
       const result = parseProgressResponse(response);
-      console.log(`[SkillLens] Progress check:`, response.trim(), '→ parsed:', result);
+      console.log(`[FOV] Progress check:`, response.trim(), '→ parsed:', result);
 
       if (!result) return;
 
@@ -1006,7 +1061,7 @@ Rules:
       Math.floor(canvas.height / 2)
     );
     if (isFrameBlank(sample)) {
-      console.warn('[SkillLens] Blank frame — skipping');
+      console.warn('[FOV] Blank frame — skipping');
       return null;
     }
 
@@ -1077,7 +1132,7 @@ Rules:
   // ── Error Handling ────────────────────────────────────────
 
   function handleError(err) {
-    console.error('[SkillLens] Error:', err);
+    console.error('[FOV] Error:', err);
     consecutiveErrors++;
 
     if (err.message.includes('429')) {
@@ -1087,7 +1142,7 @@ Rules:
       const delay = Math.max(serverDelay, expBackoff);
       backoffUntil = Date.now() + delay;
       const delaySec = Math.ceil(delay / 1000);
-      console.warn(`[SkillLens] Rate limited — backing off ${delaySec}s`);
+      console.warn(`[FOV] Rate limited — backing off ${delaySec}s`);
       setStatus(`Rate limited — waiting ${delaySec}s before retrying.`);
     } else if (err.message.includes('400')) {
       showError('Invalid API key. Go back and check your Gemini key.');

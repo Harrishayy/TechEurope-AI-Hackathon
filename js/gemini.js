@@ -73,6 +73,34 @@ class GeminiClient {
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
   }
 
+  async analyzeAudio(prompt, audioBase64, mimeType) {
+    const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`;
+
+    const body = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: audioBase64 } }
+        ]
+      }],
+      generationConfig: { temperature: 0, maxOutputTokens: 10 }
+    };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Gemini API error (${res.status}): ${errText}`);
+    }
+
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'none';
+  }
+
   async analyzeImages(systemPrompt, userMessage, imagesBase64, options = {}) {
     const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`;
     const imageParts = (imagesBase64 || []).map((imageBase64) => ({
