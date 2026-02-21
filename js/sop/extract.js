@@ -24,6 +24,7 @@
   const spinner = document.getElementById('spinner');
   const msgEl = document.getElementById('msg');
   const sopPreview = document.getElementById('sopPreview');
+  const sopRole = document.getElementById('sopRole');
   const sopSteps = document.getElementById('sopSteps');
   const sopTitle = document.getElementById('sopTitle');
   const saveBtn = document.getElementById('saveSop');
@@ -47,6 +48,7 @@
   editBtn.addEventListener('click', editGeneratedSop);
   startRecordBtn.addEventListener('click', startRecording);
   stopRecordBtn.addEventListener('click', stopRecording);
+  msgEl.addEventListener('click', hideMsg);
 
   updateModeUI();
 
@@ -430,16 +432,31 @@ Rules:
 
   function renderSOP(sop) {
     sopTitle.textContent = sop.title || 'Generated SOP';
+    if (sopRole) {
+      if (sop.role) {
+        sopRole.textContent = `Role: ${sop.role}`;
+        sopRole.classList.remove('hidden');
+      } else {
+        sopRole.textContent = '';
+        sopRole.classList.add('hidden');
+      }
+    }
     sopSteps.innerHTML = '';
 
     sop.steps.forEach((s) => {
       const div = document.createElement('div');
       div.className = 'sop-step';
-      div.innerHTML = `
-        <div class="sop-step-num">Step ${s.step}</div>
-        <div class="sop-step-action">${escapeHtml(s.action)}</div>
-        <div class="sop-step-detail">Look for: ${escapeHtml(s.look_for || '-')}</div>
+      let html = `
+        <span class="sop-step-num">Step ${s.step}</span>
+        <p class="sop-step-action">${escapeHtml(s.action)}</p>
       `;
+      if (s.look_for) {
+        html += `<p class="sop-step-detail">Look for: ${escapeHtml(s.look_for)}</p>`;
+      }
+      if (s.common_mistakes) {
+        html += `<p class="sop-step-mistakes">⚠ ${escapeHtml(s.common_mistakes)}</p>`;
+      }
+      div.innerHTML = html;
       sopSteps.appendChild(div);
     });
   }

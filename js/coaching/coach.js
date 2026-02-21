@@ -10,6 +10,7 @@
   const pauseBtn = document.getElementById('pauseBtn');
   const sopSelect = document.getElementById('sopSelect');
   const loadSopBtn = document.getElementById('loadSopBtn');
+  const trackingOverlay = document.getElementById('tracking-overlay');
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -38,6 +39,7 @@
   let backoffUntil = 0;
   let currentObject = '';
   let lostObjectStreak = 0;
+  let tracker = null;       // HandTracker instance — completely independent of Gemini
 
   init();
 
@@ -79,6 +81,16 @@
       canvas.height = Math.round(vh * scale);
 
       console.log(`[FOV] Camera: ${vw}x${vh} → Capture: ${canvas.width}x${canvas.height}`);
+
+      // Initialise hand tracker (independent of Gemini — safe to fail silently)
+      try {
+        tracker = new HandTracker(video, trackingOverlay);
+        await tracker.init();
+        tracker.start();
+      } catch (e) {
+        console.warn('[SkillLens] Hand tracker unavailable:', e);
+        tracker = null;
+      }
 
       if (steps.length > 0) {
         setStatus('Loaded SOP. Tap Start to track progress.');
@@ -615,6 +627,7 @@ Then generate a clear, practical set of 4–8 steps for how to use or interact w
 RESPOND WITH ONLY a valid JSON object in this exact format:
 {
   "object": "name of the object",
+  "detection_class": "cup",
   "steps": [
     {
       "action": "short action instruction",
@@ -628,11 +641,12 @@ Rules:
 - Reference physical features you can see (buttons, handles, labels, etc.)
 - Each look_for should describe a visual state the camera can verify
 - Steps should follow a logical sequence from start to finish
-- If the image is too blurry or dark, respond with: {"object": "unknown", "steps": []}
+- detection_class must be the single best matching COCO object detection class for this object (choose from: person, bottle, cup, bowl, fork, knife, spoon, banana, apple, orange, sandwich, broccoli, carrot, pizza, donut, cake, chair, dining table, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, toothbrush, backpack, handbag, suitcase, umbrella, tie, sports ball, bicycle, car, truck, bus, motorcycle, traffic light, stop sign)
+- If the image is too blurry or dark, respond with: {"object": "unknown", "detection_class": "", "steps": []}
 - No markdown, no extra text — ONLY the JSON object`,
         'Identify this object and generate usage steps.',
         base64,
-        { temperature: 0.3, maxTokens: 500 }
+        { temperature: 0.3, maxTokens: 550 }
       );
 
       consecutiveErrors = 0;
@@ -648,7 +662,9 @@ Rules:
         renderSteps();
         updateBadge();
         updateButton();
-        console.log(`[FOV] Identified: ${parsed.object}, ${steps.length} steps`);
+        // Tell the Object Detector which COCO class to highlight
+        if (tracker) tracker.setTargetClass(parsed.detection_class || parsed.object);
+        console.log(`[FOV] Identified: ${parsed.object}, class: ${parsed.detection_class}, ${steps.length} steps`);
       } else {
         setStatus('Can\'t identify — move closer or adjust the angle, then tap Start.');
       }
@@ -692,7 +708,7 @@ Rules:
       if (parsed.object && Array.isArray(parsed.steps)) {
         const steps = normalizeSteps(parsed.steps);
         if (steps.length) {
-          return { object: parsed.object, steps };
+          return { object: parsed.object, detection_class: parsed.detection_class || null, steps };
         }
       }
     } catch {
@@ -703,7 +719,7 @@ Rules:
           if (parsed.object && Array.isArray(parsed.steps)) {
             const steps = normalizeSteps(parsed.steps);
             if (steps.length) {
-              return { object: parsed.object, steps };
+              return { object: parsed.object, detection_class: parsed.detection_class || null, steps };
             }
           }
         } catch { /* give up */ }
@@ -780,6 +796,7 @@ Rules:
         markCompleted(result.completed_step - 1);
       } else if (currentStep >= 0 && currentStep < steps.length) {
         setStatus(`Step ${currentStep + 1}: ${steps[currentStep].look_for}`);
+        if (tracker) tracker.setCurrentStep(steps[currentStep]);
       }
     } catch (err) {
       handleError(err);
@@ -840,8 +857,10 @@ Rules:
         setStatus('All done — nice work!');
         stepBadge.textContent = 'Complete';
         updateButton();
+        if (tracker) tracker.setCurrentStep(null);
       } else {
         updateBadge();
+        if (tracker) tracker.setCurrentStep(steps[currentStep]);
       }
 
       renderSteps();
@@ -1122,10 +1141,12 @@ Rules:
       statusDot.className = 'status-dot paused';
       pauseBtn.textContent = '\u25B6';
       pauseBtn.title = 'Resume';
+      if (tracker) tracker.stop();
     } else {
       statusDot.className = 'status-dot live';
       pauseBtn.textContent = '\u23F8';
       pauseBtn.title = 'Pause';
+      if (tracker) tracker.start();
     }
   }
 
@@ -1161,6 +1182,7 @@ Rules:
 
   window.addEventListener('beforeunload', () => {
     isRunning = false;
+    if (tracker) tracker.stop();
     if (video.srcObject) {
       video.srcObject.getTracks().forEach(t => t.stop());
     }
