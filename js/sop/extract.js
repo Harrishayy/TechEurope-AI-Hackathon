@@ -1,6 +1,32 @@
 // SkillLens — SOP Extraction logic
 
 (function () {
+  const GEMINI_SOP_SYSTEM_PROMPT = `You are an expert at creating Standard Operating Procedures (SOPs) for physical, hands-on trades.
+
+Convert the user's training content into a structured SOP.
+
+Output a JSON object with this EXACT structure and nothing else - no markdown fences, no explanation:
+{
+  "title": "Name of the procedure",
+  "role": "job role (e.g., barista, electrician, plumber)",
+  "steps": [
+    {
+      "step": 1,
+      "action": "Clear, concise instruction for what to do",
+      "look_for": "Visual cue that confirms this step is being performed correctly",
+      "common_mistakes": "What could go wrong at this step"
+    }
+  ]
+}
+
+Rules:
+- Each step should be a single physical action
+- Keep action descriptions under 15 words
+- Include 8-15 steps for a typical procedure
+- Order steps chronologically
+- Be specific about quantities, times, and positions where relevant
+- Return ONLY the JSON object`;
+
   const sourceMode = document.getElementById('sourceMode');
   const textSection = document.getElementById('textSection');
   const videoSection = document.getElementById('videoSection');
@@ -67,7 +93,7 @@
       if (mode === 'text') {
         const content = (contentInput.value || '').trim();
         if (!content) throw new Error('Please paste some training content first.');
-        sop = await generateViaBackend({
+        sop = await generateSopWithFallback({
           mode,
           text: content,
           context,
@@ -81,7 +107,7 @@
         const frames = await sampleVideoFramesFromBlob(file);
         if (!frames.length) throw new Error('Could not extract frames from this video.');
 
-        sop = await generateViaBackend({
+        sop = await generateSopWithFallback({
           mode,
           frames,
           context,
@@ -99,7 +125,7 @@
         }
         if (!frames.length) throw new Error('Could not extract frames from the recorded clip.');
 
-        sop = await generateViaBackend({
+        sop = await generateSopWithFallback({
           mode,
           frames,
           context,
@@ -122,6 +148,10 @@
     }
   }
 
+  async function generateSopWithFallback(payload) {
+    return generateViaGemini(payload);
+  }
+
   async function generateViaBackend(payload) {
     const res = await fetch('/api/sop/generate', {
       method: 'POST',
@@ -138,6 +168,130 @@
       throw new Error('Invalid SOP response from server.');
     }
     return data.sop;
+  }
+
+  async function generateViaGemini(payload) {
+    const apiKey = localStorage.getItem('skilllens_api_key');
+    if (!apiKey) {
+      throw new Error('Gemini generation requires an API key on the home page.');
+    }
+
+    const client = new GeminiClient(apiKey);
+    const contextLine = payload.context ? `\nContext: ${payload.context}` : '';
+
+    let result;
+    if (payload.mode === 'text') {
+      result = await client.generateText(
+        GEMINI_SOP_SYSTEM_PROMPT,
+        `Convert this training content into an SOP:\n\n${payload.text || ''}${contextLine}`,
+        { temperature: 0.3 }
+      );
+    } else {
+      const frames = Array.isArray(payload.frames) ? payload.frames.slice(0, 12) : [];
+      if (!frames.length) {
+        throw new Error('Gemini fallback could not run because no frames were provided.');
+      }
+      result = await client.analyzeImages(
+        GEMINI_SOP_SYSTEM_PROMPT,
+        `Generate an SOP from these chronological workflow frames.${contextLine}`,
+        frames,
+        { temperature: 0.3 }
+      );
+    }
+
+    return parseSopFromAiResult(result);
+  }
+
+  function parseSopFromAiResult(text) {
+    const raw = String(text || '').trim();
+    const clean = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    try {
+      return JSON.parse(clean);
+    } catch {
+      const match = clean.match(/\{[\s\S]*\}/);
+      if (match) {
+        const extracted = match[0];
+        try {
+          return JSON.parse(extracted);
+        } catch {
+          const repaired = repairLikelyJson(extracted);
+          try {
+            return JSON.parse(repaired);
+          } catch {
+            // Continue to loose text parsing below.
+          }
+        }
+      }
+
+      const fromLooseText = parseSopFromLooseText(clean);
+      if (fromLooseText) return fromLooseText;
+      throw new Error('Gemini returned malformed JSON for SOP. Please try again.');
+    }
+  }
+
+  function repairLikelyJson(jsonText) {
+    let value = String(jsonText || '');
+
+    value = value
+      .replace(/\r\n/g, '\n')
+      .replace(/,\s*([}\]])/g, '$1') // remove trailing commas
+      .replace(/}\s*{/g, '},{') // insert missing commas between objects
+      .replace(/]\s*\[/g, '],['); // insert missing commas between arrays
+
+    return value;
+  }
+
+  function parseSopFromLooseText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (!lines.length) return null;
+
+    let title = 'Generated SOP';
+    let role = 'operator';
+    const steps = [];
+
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (lower.startsWith('title:')) {
+        title = line.slice(line.indexOf(':') + 1).trim() || title;
+        continue;
+      }
+      if (lower.startsWith('role:')) {
+        role = line.slice(line.indexOf(':') + 1).trim() || role;
+        continue;
+      }
+
+      const stepMatch = line.match(/^(?:step\s*)?(\d+)[\).\-\:]\s*(.+)$/i);
+      if (stepMatch) {
+        steps.push({
+          step: Number(stepMatch[1]) || steps.length + 1,
+          action: stepMatch[2].trim(),
+          look_for: '',
+          common_mistakes: ''
+        });
+      }
+    }
+
+    if (!steps.length) {
+      const bulletSteps = lines.filter((line) => /^[-*]\s+/.test(line));
+      bulletSteps.forEach((line, index) => {
+        steps.push({
+          step: index + 1,
+          action: line.replace(/^[-*]\s+/, '').trim(),
+          look_for: '',
+          common_mistakes: ''
+        });
+      });
+    }
+
+    if (!steps.length) return null;
+    return { title, role, steps };
   }
 
   function normalizeSOP(sop) {

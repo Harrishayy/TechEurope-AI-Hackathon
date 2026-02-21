@@ -5,6 +5,8 @@
   "description": "Futuristic tactical HUD overlay on live camera feed",
   "scripts": {
     "dev": "node server.js",
+    "dev:backend": "node server.js",
+    "dev:frontend": "node frontend-server.js",
     "start": "node server.js"
   }
 }
