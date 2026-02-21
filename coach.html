@@ -7,6 +7,9 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>SkillLens — Coaching</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body style="background:#000; overflow:hidden;">
@@ -14,27 +17,53 @@
     <!-- Camera Feed -->
     <video id="camera" autoplay playsinline muted></video>
 
+    <!-- HUD Scan Lines Overlay -->
+    <div class="hud-scanlines"></div>
+
+    <!-- HUD Corner Brackets -->
+    <div class="hud-corner hud-corner-tl"></div>
+    <div class="hud-corner hud-corner-tr"></div>
+    <div class="hud-corner hud-corner-bl"></div>
+    <div class="hud-corner hud-corner-br"></div>
+
     <!-- Top Bar -->
     <div class="coach-topbar">
-      <a href="index.html" class="back-btn" aria-label="Exit">&times;</a>
-      <span class="coach-title">
+      <a href="index.html" class="back-btn" aria-label="Exit">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2"/></svg>
+      </a>
+      <div class="coach-title-group">
         <span id="statusDot" class="status-dot live"></span>
-        SkillLens
-      </span>
-      <span id="stepBadge" class="step-badge">Ready</span>
+        <span class="coach-title">SKILLLENS</span>
+      </div>
+      <span id="stepBadge" class="step-badge">READY</span>
     </div>
 
     <!-- Bottom Overlay -->
     <div class="coach-overlay">
-      <div class="sop-picker">
-        <select id="sopSelect" class="sop-select"></select>
-        <button id="loadSopBtn" class="btn-load-sop" type="button">Load SOP</button>
-      </div>
-      <div id="statusLine" class="status-line">Initializing camera...</div>
-      <div id="stepList" class="step-list"></div>
-      <div class="coach-controls">
-        <button id="nextBtn" class="btn-next">Skip &rarr;</button>
-        <button id="pauseBtn" class="btn-pause" title="Pause">&#9208;</button>
+      <div class="hud-panel">
+        <div class="sop-picker">
+          <select id="sopSelect" class="sop-select"></select>
+          <button id="loadSopBtn" class="btn-load-sop" type="button">LOAD</button>
+        </div>
+        <div id="statusLine" class="status-line">INITIALIZING CAMERA...</div>
+        <div id="stepList" class="step-list"></div>
+
+        <!-- Voice Status Bar -->
+        <div class="hud-voice-bar">
+          <div id="micIndicator" class="mic-indicator" title="Voice commands active">
+            <span class="mic-dot"></span>
+            <span id="voiceLabel" class="voice-label">LISTENING</span>
+          </div>
+          <div id="transcriptBox" class="hud-transcript">
+            <span class="transcript-label">VOICE</span>
+            <span id="transcriptText" class="transcript-text">—</span>
+          </div>
+        </div>
+
+        <div class="coach-controls">
+          <button id="nextBtn" class="btn-next">SKIP &rarr;</button>
+          <button id="pauseBtn" class="btn-pause" title="Pause">&#9208;</button>
+        </div>
       </div>
     </div>
   </div>
