@@ -56,6 +56,10 @@
     loadSopBtn.addEventListener('click', loadSelectedSop);
     hydrateSopSelector();
 
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') hydrateSopSelector();
+    });
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -850,6 +854,17 @@ Rules:
     availableSops = loadSopsForAccount(accountId);
     const currentSop = safeJson(localStorage.getItem('skilllens_current_sop'));
 
+    // Merge skilllens_current_sop into list if missing (e.g. just saved from extract)
+    if (currentSop && Array.isArray(currentSop.steps) && currentSop.steps.length > 0) {
+      const id = currentSop.id || `sop_${Date.now()}`;
+      if (!currentSop.id) currentSop.id = id;
+      const exists = availableSops.some((s) => s.id === currentSop.id);
+      if (!exists) {
+        availableSops.unshift(currentSop);
+        localStorage.setItem(`skilllens_sops_${accountId}`, JSON.stringify(availableSops.slice(0, 100)));
+      }
+    }
+
     sopSelect.innerHTML = '';
     const identifyOption = document.createElement('option');
     identifyOption.value = '';
@@ -858,8 +873,8 @@ Rules:
 
     availableSops.forEach((sop) => {
       const opt = document.createElement('option');
-      opt.value = sop.id;
-      opt.textContent = sop.title || `SOP ${sop.id}`;
+      opt.value = sop.id || `sop_${sop.created_at || Date.now()}`;
+      opt.textContent = sop.title || `SOP ${sop.id || 'untitled'}`;
       sopSelect.appendChild(opt);
     });
 
@@ -924,11 +939,22 @@ Rules:
   function loadSopsForAccount(accountId) {
     const raw = localStorage.getItem(`skilllens_sops_${accountId}`);
     const parsed = safeJson(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const list = Array.isArray(parsed) ? parsed : [];
+    let changed = false;
+    const out = list.map((sop, i) => {
+      if (!sop.id) {
+        sop.id = `sop_${sop.created_at || Date.now()}_${i}`;
+        changed = true;
+      }
+      return sop;
+    });
+    if (changed) localStorage.setItem(`skilllens_sops_${accountId}`, JSON.stringify(out));
+    return out;
   }
 
   function getAccountId() {
-    return (localStorage.getItem('skilllens_account_id') || 'default').trim();
+    const raw = (localStorage.getItem('skilllens_account_id') || 'default').trim();
+    return raw ? raw.toLowerCase().replace(/\s+/g, '-') : 'default';
   }
 
   function safeJson(value) {

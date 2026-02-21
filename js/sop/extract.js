@@ -29,6 +29,7 @@
   const sopTitle = document.getElementById('sopTitle');
   const saveBtn = document.getElementById('saveSop');
   const editBtn = document.getElementById('editSop');
+  const coachingLink = document.getElementById('coachingLink');
 
   let generatedSOP = null;
   let generatedSourceType = 'text';
@@ -66,6 +67,7 @@
     spinner.classList.add('active');
     sopPreview.classList.remove('active');
     hideMsg();
+    if (coachingLink) coachingLink.style.display = 'none';
 
     try {
       const client = new GeminiClient(apiKey);
@@ -464,6 +466,10 @@ Rules:
   function saveGeneratedSop() {
     if (!generatedSOP) return;
 
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    const origText = 'Save SOP';
+
     const accountId = getAccountId();
     const listKey = `skilllens_sops_${accountId}`;
     const current = {
@@ -480,11 +486,21 @@ Rules:
     list.unshift(current);
     localStorage.setItem(listKey, JSON.stringify(list.slice(0, 100)));
 
-    showMsg(`SOP saved to account: ${accountId}`, 'success');
+    saveBtn.textContent = 'Saved ✓';
+    saveBtn.classList.add('saved');
+    showMsg(`SOP saved. Start Coaching →`, 'success');
+    showCoachingLink();
+
+    setTimeout(() => {
+      saveBtn.textContent = origText;
+      saveBtn.disabled = false;
+      saveBtn.classList.remove('saved');
+    }, 2000);
   }
 
   function editGeneratedSop() {
     if (!generatedSOP) return;
+    if (coachingLink) coachingLink.style.display = 'none';
     sourceMode.value = 'text';
     updateModeUI();
     sopPreview.classList.remove('active');
@@ -493,7 +509,8 @@ Rules:
   }
 
   function getAccountId() {
-    return (localStorage.getItem('skilllens_account_id') || 'default').trim();
+    const raw = (localStorage.getItem('skilllens_account_id') || 'default').trim();
+    return raw ? raw.toLowerCase().replace(/\s+/g, '-') : 'default';
   }
 
   function safeJsonParse(value, fallback) {
@@ -519,6 +536,10 @@ Rules:
   function showMsg(text, type) {
     msgEl.textContent = text;
     msgEl.className = `msg msg-${type} active`;
+  }
+
+  function showCoachingLink() {
+    if (coachingLink) coachingLink.style.display = '';
   }
 
   function hideMsg() {
