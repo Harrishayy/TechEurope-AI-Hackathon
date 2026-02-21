@@ -1,15 +1,17 @@
 // Gemini API wrapper for SkillLens
 
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-1.5-flash'
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_FALLBACK_MODELS = [
+  'models/gemini-2.5-flash',
+  'models/gemini-2.5-flash-lite',
+  'models/gemini-2.0-flash',
+  'models/gemini-2.0-flash-lite'
 ];
 
 class GeminiClient {
   constructor(apiKey) {
     this.apiKey = apiKey;
+    this.modelNamesPromise = null;
   }
 
   async generateText(systemPrompt, userMessage, options = {}) {
@@ -100,9 +102,10 @@ class GeminiClient {
 
   async generateWithModelFallback(body) {
     let lastErr = null;
+    const modelNames = await this.getGenerateContentModels();
 
-    for (const model of GEMINI_MODELS) {
-      const url = `${GEMINI_BASE}/${model}:generateContent?key=${this.apiKey}`;
+    for (const model of modelNames) {
+      const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${this.apiKey}`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -123,4 +126,51 @@ class GeminiClient {
 
     throw lastErr || new Error('Gemini API error: no models available.');
   }
+
+  async getGenerateContentModels() {
+    if (!this.modelNamesPromise) {
+      this.modelNamesPromise = this.fetchGenerateContentModels();
+    }
+
+    const names = await this.modelNamesPromise;
+    if (Array.isArray(names) && names.length) return names;
+    return GEMINI_FALLBACK_MODELS;
+  }
+
+  async fetchGenerateContentModels() {
+    const url = `${GEMINI_API_BASE}/models?key=${this.apiKey}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return GEMINI_FALLBACK_MODELS;
+
+      const data = await res.json();
+      const models = Array.isArray(data?.models) ? data.models : [];
+
+      const usable = models
+        .filter((m) => {
+          const name = String(m?.name || '');
+          const methods = Array.isArray(m?.supportedGenerationMethods) ? m.supportedGenerationMethods : [];
+          return name.startsWith('models/gemini-') && methods.includes('generateContent');
+        })
+        .map((m) => m.name)
+        .sort((a, b) => rankModelName(a) - rankModelName(b));
+
+      return usable.length ? usable : GEMINI_FALLBACK_MODELS;
+    } catch {
+      return GEMINI_FALLBACK_MODELS;
+    }
+  }
+}
+
+function rankModelName(name) {
+  const lower = String(name || '').toLowerCase();
+  const rank = [
+    'models/gemini-2.5-flash',
+    'models/gemini-2.5-flash-lite',
+    'models/gemini-2.0-flash',
+    'models/gemini-2.0-flash-lite'
+  ];
+
+  const idx = rank.indexOf(lower);
+  return idx === -1 ? rank.length + 1 : idx;
 }

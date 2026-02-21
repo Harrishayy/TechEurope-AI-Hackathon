@@ -13,6 +13,8 @@ const DUST_BASE_URL = process.env.DUST_BASE_URL || 'https://dust.tt';
 const DUST_WORKSPACE_ID = process.env.DUST_WORKSPACE_ID || '';
 const DUST_API_KEY = process.env.DUST_API_KEY || '';
 const DUST_AGENT_ID = process.env.DUST_AGENT_ID || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const DEFAULT_ACCOUNT_ID = process.env.DEFAULT_ACCOUNT_ID || 'default';
 const DEBUG_DUST = process.env.DEBUG_DUST !== '0';
 
 const MIME_TYPES = {
@@ -42,6 +44,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && reqUrl.pathname === '/api/health') {
       return sendJson(res, 200, {
         ok: true,
+        dustConfigured: Boolean(DUST_WORKSPACE_ID && DUST_API_KEY && DUST_AGENT_ID)
+      });
+    }
+
+    if (req.method === 'GET' && reqUrl.pathname === '/api/config') {
+      return sendJson(res, 200, {
+        ok: true,
+        geminiApiKey: GEMINI_API_KEY,
+        accountId: DEFAULT_ACCOUNT_ID,
         dustConfigured: Boolean(DUST_WORKSPACE_ID && DUST_API_KEY && DUST_AGENT_ID)
       });
     }

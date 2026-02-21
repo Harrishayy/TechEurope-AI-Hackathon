@@ -38,16 +38,17 @@
   let consecutiveErrors = 0;
   let backoffUntil = 0;
   let tracker = null;       // HandTracker instance — completely independent of Gemini
+  let geminiApiKey = '';
 
   init();
 
   async function init() {
-    const apiKey = localStorage.getItem('skilllens_api_key');
-    if (!apiKey) {
-      showError('No API key found. Go back and set your Gemini key first.');
+    geminiApiKey = await getGeminiApiKey();
+    if (!geminiApiKey) {
+      showError('No Gemini API key found in server .env (GEMINI_API_KEY).');
       return;
     }
-    client = new GeminiClient(apiKey);
+    client = new GeminiClient(geminiApiKey);
 
     updateBadge();
     updateButton();
@@ -151,7 +152,7 @@ RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
   }
 
   async function initVoice() {
-    const apiKey = localStorage.getItem('skilllens_api_key');
+    const apiKey = geminiApiKey || await getGeminiApiKey();
     if (!apiKey) return;
 
     try {
@@ -953,8 +954,21 @@ Rules:
   }
 
   function getAccountId() {
-    const raw = (localStorage.getItem('skilllens_account_id') || 'default').trim();
+    const rawConfig = String(window.SkillLensConfig?.accountId || '').trim();
+    const raw = (rawConfig || localStorage.getItem('skilllens_account_id') || 'default').trim();
     return raw ? raw.toLowerCase().replace(/\s+/g, '-') : 'default';
+  }
+
+  async function getGeminiApiKey() {
+    if (window.SkillLensConfig?.load) {
+      const cfg = await window.SkillLensConfig.load();
+      if (cfg?.geminiApiKey) return cfg.geminiApiKey;
+    }
+
+    const res = await fetch('/api/config');
+    if (!res.ok) return '';
+    const data = await res.json().catch(() => ({}));
+    return String(data?.geminiApiKey || '');
   }
 
   function safeJson(value) {

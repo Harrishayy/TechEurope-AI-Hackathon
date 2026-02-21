@@ -171,9 +171,9 @@ Rules:
   }
 
   async function generateViaGemini(payload) {
-    const apiKey = localStorage.getItem('skilllens_api_key');
+    const apiKey = await getGeminiApiKey();
     if (!apiKey) {
-      throw new Error('Gemini generation requires an API key on the home page.');
+      throw new Error('Gemini API key is missing in server .env (GEMINI_API_KEY).');
     }
 
     const client = new GeminiClient(apiKey);
@@ -200,6 +200,18 @@ Rules:
     }
 
     return parseSopFromAiResult(result);
+  }
+
+  async function getGeminiApiKey() {
+    if (window.SkillLensConfig?.load) {
+      const cfg = await window.SkillLensConfig.load();
+      if (cfg?.geminiApiKey) return cfg.geminiApiKey;
+    }
+
+    const res = await fetch('/api/config');
+    if (!res.ok) return '';
+    const data = await res.json().catch(() => ({}));
+    return String(data?.geminiApiKey || '');
   }
 
   function parseSopFromAiResult(text) {
