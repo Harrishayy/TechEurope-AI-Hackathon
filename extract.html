@@ -17,12 +17,54 @@
     <div id="msg" class="msg"></div>
 
     <div class="form-group">
+      <label for="sourceMode">Input Mode</label>
+      <select id="sourceMode" class="input-control">
+        <option value="live">Live Camera Recording</option>
+        <option value="text">Text / Transcript</option>
+        <option value="video">Pre-recorded Video</option>
+      </select>
+    </div>
+
+    <div id="textSection" class="form-group">
       <label for="contentInput">Training Content</label>
       <textarea
         id="contentInput"
-        placeholder="Paste a YouTube transcript, training manual excerpt, or any step-by-step procedure description here...
+        placeholder="Paste a transcript, manual excerpt, SOP notes, or procedure steps..."
+      ></textarea>
+    </div>
 
-Example: 'First, remove the portafilter from the machine. Knock out any old grounds. Then flush the group head briefly with hot water...'"
+    <div id="videoSection" class="form-group hidden">
+      <label for="videoFile">Upload Video</label>
+      <input id="videoFile" class="input-control" type="file" accept="video/*">
+      <p class="hint">Use a short clip (30-90s) for fastest results.</p>
+    </div>
+
+    <div id="liveSection" class="form-group hidden">
+      <label>Live Camera Recording</label>
+      <div id="livePreviewWrap" class="live-preview-wrap hidden">
+        <video id="livePreview" class="live-preview" autoplay muted playsinline></video>
+        <div id="recordingBadge" class="recording-badge hidden" aria-live="polite">
+          <span class="recording-dot"></span>
+          <span>REC</span>
+          <span id="recordTimer" class="record-timer">00:00</span>
+        </div>
+      </div>
+      <div class="record-controls">
+        <button id="startRecordBtn" class="btn btn-secondary" type="button">Start Recording</button>
+        <button id="stopRecordBtn" class="btn btn-secondary" type="button" disabled>Stop</button>
+      </div>
+      <p id="recordStatus" class="hint">Record 30-60 seconds, then generate SOP.</p>
+      <div id="recordedPreviewWrap" class="recorded-preview-wrap hidden">
+        <label for="recordedPreview">Recorded Clip</label>
+        <video id="recordedPreview" class="live-preview" controls playsinline></video>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="contextInput">Extra Context (Optional)</label>
+      <textarea
+        id="contextInput"
+        placeholder="Add role, tooling context, safety notes, or quality rules."
       ></textarea>
     </div>
 
