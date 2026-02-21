@@ -104,6 +104,428 @@
     }
   }
 
+  // ── Voice Commands ──────────────────────────────────────────
+  //
+  // Strategy: Try Gemini Live API (WebSocket, native audio) first.
+  // If it fails after a few attempts, fall back to
+  // Web Speech API (transcription) + Gemini REST (classification).
+
+  const micIndicator = document.getElementById('micIndicator');
+  const voiceLabel = document.getElementById('voiceLabel');
+  const transcriptText = document.getElementById('transcriptText');
+  let flashTimer = null;
+  let voiceMode = 'none'; // 'none' | 'live' | 'fallback'
+
+  // ── Gemini Live API (primary) ──
+
+  const LIVE_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+  // Models to try in order — first one that connects wins
+  const LIVE_MODELS = [
+    'models/gemini-2.0-flash-live-001',
+    'models/gemini-2.0-flash-exp',
+  ];
+
+  let liveSocket = null;
+  let audioContext = null;
+  let micStream = null;
+  let audioWorklet = null;
+  let liveModelIndex = 0;
+  let liveFailCount = 0;
+  const MAX_LIVE_FAILURES = 4; // after this many failures, switch to fallback
+
+  function buildClassifierPrompt() {
+    return `You are a voice command classifier for a hands-free coaching app. The user is performing a physical task and will speak short commands.
+
+Available actions: skip, done, start, pause, resume, reset.
+- skip/done = advance to the next step
+- start = begin coaching
+- pause = pause the session
+- resume = unpause the session
+- reset = start over
+
+Classify the user's speech into ONE action name. If it is not a command (noise, irrelevant speech, silence), respond "none".
+
+RESPOND WITH ONLY ONE WORD: skip, done, start, pause, resume, reset, or none.`;
+  }
+
+  async function initVoice() {
+    const apiKey = localStorage.getItem('skilllens_api_key');
+    if (!apiKey) return;
+
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
+      });
+    } catch (err) {
+      console.warn('[SkillLens] Mic access failed:', err);
+      if (err.name === 'NotAllowedError' && micIndicator) {
+        micIndicator.classList.add('denied');
+      }
+      // Mic denied — try fallback which requests its own mic via Web Speech API
+      initFallbackVoice();
+      return;
+    }
+
+    // Try Live API first
+    try {
+      audioContext = new AudioContext({ sampleRate: 16000 });
+
+      const workletCode = `
+        class PCMProcessor extends AudioWorkletProcessor {
+          constructor() {
+            super();
+            this._buffer = [];
+            this._bufferSize = 2048;
+          }
+          process(inputs) {
+            const input = inputs[0];
+            if (!input || !input[0]) return true;
+            const samples = input[0];
+            for (let i = 0; i < samples.length; i++) {
+              this._buffer.push(samples[i]);
+            }
+            if (this._buffer.length >= this._bufferSize) {
+              const pcm16 = new Int16Array(this._buffer.length);
+              for (let i = 0; i < this._buffer.length; i++) {
+                const s = Math.max(-1, Math.min(1, this._buffer[i]));
+                pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+              }
+              this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
+              this._buffer = [];
+            }
+            return true;
+          }
+        }
+        registerProcessor('pcm-processor', PCMProcessor);
+      `;
+      const blob = new Blob([workletCode], { type: 'application/javascript' });
+      const workletUrl = URL.createObjectURL(blob);
+      await audioContext.audioWorklet.addModule(workletUrl);
+      URL.revokeObjectURL(workletUrl);
+
+      connectLiveApi(apiKey);
+    } catch (err) {
+      console.warn('[SkillLens] AudioWorklet init failed, using fallback:', err);
+      initFallbackVoice();
+    }
+  }
+
+  function connectLiveApi(apiKey) {
+    if (voiceMode === 'fallback') return; // already switched
+    if (liveSocket && liveSocket.readyState === WebSocket.OPEN) return;
+
+    const modelName = LIVE_MODELS[liveModelIndex] || LIVE_MODELS[0];
+    const url = `${LIVE_WS_URL}?key=${apiKey}`;
+    console.log(`[SkillLens] Trying Live API with ${modelName}...`);
+    liveSocket = new WebSocket(url);
+
+    liveSocket.onopen = () => {
+      console.log('[SkillLens] Live API WebSocket open, sending setup...');
+      const setup = {
+        setup: {
+          model: modelName,
+          generationConfig: {
+            responseModalities: ['TEXT'],
+          },
+          systemInstruction: {
+            parts: [{ text: buildClassifierPrompt() }]
+          },
+        }
+      };
+      liveSocket.send(JSON.stringify(setup));
+    };
+
+    liveSocket.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+
+        if (msg.setupComplete) {
+          console.log('[SkillLens] Live API ready — streaming audio');
+          voiceMode = 'live';
+          liveFailCount = 0;
+          if (micIndicator) micIndicator.classList.add('active');
+          startAudioStreaming();
+          return;
+        }
+
+        if (msg.serverContent) {
+          const parts = msg.serverContent.modelTurn?.parts || [];
+          for (const part of parts) {
+            if (part.text) {
+              const action = part.text.trim().toLowerCase().replace(/[^a-z]/g, '');
+              console.log(`[SkillLens] Live API: "${part.text.trim()}" → ${action}`);
+              if (action && action !== 'none') {
+                executeVoiceCommand(action);
+                flashMic(action);
+              }
+            }
+          }
+          if (msg.serverContent.inputTranscription?.text) {
+            console.log(`[SkillLens] Heard: "${msg.serverContent.inputTranscription.text}"`);
+            if (transcriptText) transcriptText.textContent = msg.serverContent.inputTranscription.text;
+          }
+        }
+      } catch (err) {
+        console.warn('[SkillLens] Live API parse error:', err);
+      }
+    };
+
+    liveSocket.onerror = (err) => {
+      console.warn('[SkillLens] Live API WebSocket error:', err);
+    };
+
+    liveSocket.onclose = (event) => {
+      console.log(`[SkillLens] Live API disconnected (code: ${event.code}, reason: "${event.reason}")`);
+      if (micIndicator) micIndicator.classList.remove('active');
+      stopAudioStreaming();
+
+      if (voiceMode === 'fallback') return; // already switched
+
+      liveFailCount++;
+
+      // If this model failed, try the next one
+      if (liveFailCount <= 2 && liveModelIndex < LIVE_MODELS.length - 1) {
+        liveModelIndex++;
+        console.log(`[SkillLens] Trying next model: ${LIVE_MODELS[liveModelIndex]}`);
+        setTimeout(() => connectLiveApi(apiKey), 500);
+        return;
+      }
+
+      // If we've exhausted models and retries, switch to fallback
+      if (liveFailCount >= MAX_LIVE_FAILURES) {
+        console.log('[SkillLens] Live API failed — switching to Web Speech + Gemini REST fallback');
+        initFallbackVoice();
+        return;
+      }
+
+      // Otherwise retry same model
+      if (isRunning) {
+        setTimeout(() => connectLiveApi(apiKey), 2000);
+      }
+    };
+  }
+
+  function startAudioStreaming() {
+    if (!audioContext || !micStream || !liveSocket) return;
+
+    const source = audioContext.createMediaStreamSource(micStream);
+    audioWorklet = new AudioWorkletNode(audioContext, 'pcm-processor');
+
+    audioWorklet.port.onmessage = (event) => {
+      if (liveSocket && liveSocket.readyState === WebSocket.OPEN) {
+        const base64 = arrayBufferToBase64(event.data);
+        liveSocket.send(JSON.stringify({
+          realtimeInput: {
+            mediaChunks: [{
+              mimeType: 'audio/pcm;rate=16000',
+              data: base64
+            }]
+          }
+        }));
+      }
+    };
+
+    source.connect(audioWorklet);
+    audioWorklet.connect(audioContext.destination);
+  }
+
+  function stopAudioStreaming() {
+    if (audioWorklet) {
+      try { audioWorklet.disconnect(); } catch { /* ignore */ }
+      audioWorklet = null;
+    }
+  }
+
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  // ── Fallback: Web Speech API transcription + Gemini REST classification ──
+
+  let fallbackProcessing = false;
+
+  function initFallbackVoice() {
+    if (voiceMode === 'fallback') return; // already running
+    voiceMode = 'fallback';
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn('[SkillLens] No speech recognition available');
+      if (micIndicator) micIndicator.classList.add('unsupported');
+      return;
+    }
+
+    console.log('[SkillLens] Using fallback: Web Speech API + Gemini REST');
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      if (micIndicator) micIndicator.classList.add('active');
+    };
+
+    recognition.onend = () => {
+      if (micIndicator) micIndicator.classList.remove('active');
+      if (isRunning) {
+        try { recognition.start(); } catch { /* already started */ }
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.warn('[SkillLens] Speech error:', event.error);
+      if (event.error === 'not-allowed') {
+        if (micIndicator) micIndicator.classList.add('denied');
+        return;
+      }
+      if (isRunning) {
+        setTimeout(() => {
+          try { recognition.start(); } catch { /* ignore */ }
+        }, 1000);
+      }
+    };
+
+    recognition.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (!event.results[i].isFinal) continue;
+        const transcript = event.results[i][0].transcript.trim();
+        if (transcript.length < 2) continue;
+        console.log(`[SkillLens] Heard: "${transcript}"`);
+        if (transcriptText) transcriptText.textContent = transcript;
+        classifyWithGemini(transcript);
+      }
+    };
+
+    try { recognition.start(); } catch { /* ignore */ }
+
+    window.addEventListener('beforeunload', () => {
+      try { recognition.stop(); } catch { /* ignore */ }
+    });
+  }
+
+  async function classifyWithGemini(transcript) {
+    // Quick match for obvious short commands (instant, no API call)
+    const t = transcript.toLowerCase();
+    const wordCount = t.split(/\s+/).length;
+    if (wordCount <= 3) {
+      const quickMap = [
+        { words: ['skip', 'next'], action: 'skip' },
+        { words: ['done', 'finished'], action: 'done' },
+        { words: ['start', 'begin'], action: 'start' },
+        { words: ['pause', 'stop', 'wait', 'hold'], action: 'pause' },
+        { words: ['resume', 'continue'], action: 'resume' },
+        { words: ['reset', 'restart'], action: 'reset' },
+      ];
+      for (const entry of quickMap) {
+        for (const w of entry.words) {
+          if (t.includes(w)) {
+            console.log(`[SkillLens] Quick match: "${transcript}" → ${entry.action}`);
+            executeVoiceCommand(entry.action);
+            flashMic(entry.action);
+            return;
+          }
+        }
+      }
+    }
+
+    // Use Gemini REST API for natural language classification
+    if (fallbackProcessing || !client) return;
+    fallbackProcessing = true;
+
+    try {
+      const availableActions = [];
+      if (mode === 'ready') availableActions.push('start — begin coaching');
+      if (mode === 'coaching') {
+        availableActions.push('skip — skip current step');
+        availableActions.push('done — mark step complete');
+      }
+      if (mode === 'coaching' && !isPaused) availableActions.push('pause — pause session');
+      if (mode === 'coaching' && isPaused) availableActions.push('resume — resume session');
+      if (mode === 'complete') availableActions.push('reset — start over');
+
+      if (availableActions.length === 0) { fallbackProcessing = false; return; }
+
+      const response = await client.generateText(
+        `You are a voice command classifier. The user spoke a command to control a coaching app.
+
+Available actions:
+${availableActions.map(a => `- ${a}`).join('\n')}
+
+Classify the user's speech into ONE action name, or "none" if irrelevant.
+RESPOND WITH ONE WORD ONLY: skip, done, start, pause, resume, reset, or none.`,
+        `User said: "${transcript}"`,
+        { temperature: 0, maxTokens: 10 }
+      );
+
+      const action = response.trim().toLowerCase().replace(/[^a-z]/g, '');
+      console.log(`[SkillLens] Gemini classified: "${transcript}" → ${action}`);
+
+      if (action && action !== 'none') {
+        executeVoiceCommand(action);
+        flashMic(action);
+      }
+    } catch (err) {
+      console.warn('[SkillLens] Classification error:', err);
+    } finally {
+      fallbackProcessing = false;
+    }
+  }
+
+  // ── Shared voice execution ──
+
+  function executeVoiceCommand(command) {
+    switch (command) {
+      case 'skip':
+      case 'done':
+        if (mode === 'coaching' && currentStep >= 0 && currentStep < steps.length) {
+          markCompleted(currentStep);
+        }
+        break;
+      case 'start':
+        if (mode === 'ready') {
+          handleMainButton();
+        }
+        break;
+      case 'pause':
+        if (!isPaused) togglePause();
+        break;
+      case 'resume':
+        if (isPaused) togglePause();
+        break;
+      case 'reset':
+        if (mode === 'complete') {
+          handleMainButton();
+        }
+        break;
+    }
+  }
+
+  function flashMic(command) {
+    if (!micIndicator) return;
+    if (voiceLabel) voiceLabel.textContent = command.toUpperCase();
+    clearTimeout(flashTimer);
+    micIndicator.classList.add('heard');
+    flashTimer = setTimeout(() => {
+      micIndicator.classList.remove('heard');
+      if (voiceLabel) voiceLabel.textContent = 'LISTENING';
+    }, 2000);
+  }
+
+  initVoice();
+
   // ── Capture Loop ──────────────────────────────────────────
 
   async function startCaptureLoop() {
@@ -635,26 +1057,26 @@ Rules:
 
   function updateBadge() {
     if (mode === 'ready') {
-      stepBadge.textContent = steps.length ? 'SOP Ready' : 'Ready';
+      stepBadge.textContent = steps.length ? 'SOP READY' : 'READY';
     } else if (mode === 'identifying') {
-      stepBadge.textContent = 'Identifying';
+      stepBadge.textContent = 'SCANNING';
     } else if (mode === 'coaching') {
       const done = steps.filter(s => s.completed).length;
       stepBadge.textContent = `${done}/${steps.length}`;
     } else {
-      stepBadge.textContent = 'Complete';
+      stepBadge.textContent = 'COMPLETE';
     }
   }
 
   function updateButton() {
     if (mode === 'ready') {
-      nextBtn.textContent = steps.length ? 'Start SOP' : 'Start';
+      nextBtn.textContent = steps.length ? 'ENGAGE' : 'SCAN';
     } else if (mode === 'identifying') {
-      nextBtn.textContent = 'Identifying...';
+      nextBtn.textContent = 'SCANNING...';
     } else if (mode === 'coaching') {
-      nextBtn.innerHTML = 'Skip \u2192';
+      nextBtn.innerHTML = 'SKIP \u2192';
     } else {
-      nextBtn.textContent = 'New Object';
+      nextBtn.textContent = 'NEW TARGET';
     }
   }
 
@@ -708,6 +1130,15 @@ Rules:
     if (tracker) tracker.stop();
     if (video.srcObject) {
       video.srcObject.getTracks().forEach(t => t.stop());
+    }
+    if (micStream) {
+      micStream.getTracks().forEach(t => t.stop());
+    }
+    if (liveSocket) {
+      try { liveSocket.close(); } catch { /* ignore */ }
+    }
+    if (audioContext) {
+      try { audioContext.close(); } catch { /* ignore */ }
     }
   });
 })();
