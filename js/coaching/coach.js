@@ -8,6 +8,8 @@
   const statusDot = document.getElementById('statusDot');
   const nextBtn = document.getElementById('nextBtn');
   const pauseBtn = document.getElementById('pauseBtn');
+  const sopSelect = document.getElementById('sopSelect');
+  const loadSopBtn = document.getElementById('loadSopBtn');
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -28,6 +30,7 @@
   let mode = 'ready'; // 'ready' | 'identifying' | 'coaching' | 'complete'
   let steps = [];           // { text: string, completed: boolean }[]
   let currentStep = 0;      // Index of first uncompleted step
+  let availableSops = [];
   let isRunning = false;
   let isPaused = false;
   let isProcessing = false;
@@ -48,6 +51,8 @@
     updateButton();
     nextBtn.addEventListener('click', handleMainButton);
     pauseBtn.addEventListener('click', togglePause);
+    loadSopBtn.addEventListener('click', loadSelectedSop);
+    hydrateSopSelector();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -73,7 +78,11 @@
 
       console.log(`[SkillLens] Camera: ${vw}x${vh} → Capture: ${canvas.width}x${canvas.height}`);
 
-      setStatus('Point your camera at an object, then tap Start.');
+      if (steps.length > 0) {
+        setStatus('Loaded SOP. Tap Start to track progress.');
+      } else {
+        setStatus('Point your camera at an object, then tap Start.');
+      }
       startCaptureLoop();
     } catch (err) {
       console.error('Camera error:', err);
@@ -292,7 +301,7 @@ Rules:
 
   function handleMainButton() {
     if (mode === 'ready') {
-      mode = 'identifying';
+      mode = steps.length > 0 ? 'coaching' : 'identifying';
       updateBadge();
       updateButton();
       return;
@@ -314,11 +323,108 @@ Rules:
 
   function resetState() {
     mode = 'ready';
-    steps = [];
-    currentStep = 0;
+    if (steps.length > 0) {
+      steps = steps.map((step) => ({ text: step.text, completed: false }));
+      currentStep = 0;
+    } else {
+      currentStep = 0;
+    }
     stepListEl.innerHTML = '';
     updateBadge();
     updateButton();
+    renderSteps();
+  }
+
+  function hydrateSopSelector() {
+    const accountId = getAccountId();
+    availableSops = loadSopsForAccount(accountId);
+    const currentSop = safeJson(localStorage.getItem('skilllens_current_sop'));
+
+    sopSelect.innerHTML = '';
+    const identifyOption = document.createElement('option');
+    identifyOption.value = '';
+    identifyOption.textContent = 'Auto-identify object';
+    sopSelect.appendChild(identifyOption);
+
+    availableSops.forEach((sop) => {
+      const opt = document.createElement('option');
+      opt.value = sop.id;
+      opt.textContent = sop.title || `SOP ${sop.id}`;
+      sopSelect.appendChild(opt);
+    });
+
+    if (currentSop && currentSop.id && availableSops.some((sop) => sop.id === currentSop.id)) {
+      sopSelect.value = currentSop.id;
+      applySop(currentSop);
+    } else {
+      sopSelect.value = '';
+    }
+  }
+
+  function loadSelectedSop() {
+    const selectedId = sopSelect.value;
+    if (!selectedId) {
+      steps = [];
+      currentStep = 0;
+      mode = 'ready';
+      renderSteps();
+      updateBadge();
+      updateButton();
+      setStatus('Auto-identify mode enabled. Tap Start to detect object.');
+      return;
+    }
+
+    const selected = availableSops.find((sop) => sop.id === selectedId);
+    if (!selected) {
+      showError('Could not load selected SOP.');
+      return;
+    }
+
+    applySop(selected);
+  }
+
+  function applySop(sop) {
+    const normalized = normalizeSopSteps(sop);
+    if (!normalized.length) {
+      showError('Selected SOP has no usable steps.');
+      return;
+    }
+
+    localStorage.setItem('skilllens_current_sop', JSON.stringify(sop));
+    steps = normalized;
+    currentStep = 0;
+    mode = 'ready';
+    renderSteps();
+    updateBadge();
+    updateButton();
+    setStatus(`${sop.title || 'SOP'} loaded. Tap Start to begin.`);
+  }
+
+  function normalizeSopSteps(sop) {
+    const rawSteps = Array.isArray(sop.steps) ? sop.steps : [];
+    return rawSteps.map((step) => {
+      if (typeof step === 'string') return { text: step, completed: false };
+      return { text: step.action || step.text || '', completed: false };
+    }).filter((step) => step.text);
+  }
+
+  function loadSopsForAccount(accountId) {
+    const raw = localStorage.getItem(`skilllens_sops_${accountId}`);
+    const parsed = safeJson(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  function getAccountId() {
+    return (localStorage.getItem('skilllens_account_id') || 'default').trim();
+  }
+
+  function safeJson(value) {
+    if (!value) return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
   }
 
   // ── Rendering ─────────────────────────────────────────────
@@ -406,7 +512,7 @@ Rules:
 
   function updateBadge() {
     if (mode === 'ready') {
-      stepBadge.textContent = 'Ready';
+      stepBadge.textContent = steps.length ? 'SOP Ready' : 'Ready';
     } else if (mode === 'identifying') {
       stepBadge.textContent = 'Identifying';
     } else if (mode === 'coaching') {
@@ -419,7 +525,7 @@ Rules:
 
   function updateButton() {
     if (mode === 'ready') {
-      nextBtn.textContent = 'Start';
+      nextBtn.textContent = steps.length ? 'Start SOP' : 'Start';
     } else if (mode === 'identifying') {
       nextBtn.textContent = 'Identifying...';
     } else if (mode === 'coaching') {

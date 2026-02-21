@@ -101,6 +101,10 @@ a:hover { text-decoration: underline; }
   margin-bottom: 0.5rem;
 }
 
+.api-key-section .mt-label {
+  margin-top: 1rem;
+}
+
 .input-group {
   display: flex;
   gap: 0.5rem;
@@ -284,6 +288,90 @@ footer {
 
 .form-group textarea::placeholder {
   color: var(--text-secondary);
+}
+
+.input-control {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.input-control:focus {
+  border-color: var(--accent);
+}
+
+#contextInput {
+  min-height: 110px;
+}
+
+.live-preview {
+  width: 100%;
+  border-radius: var(--radius);
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 0.6rem;
+  max-height: 280px;
+  object-fit: cover;
+}
+
+.live-preview-wrap {
+  position: relative;
+  margin-bottom: 0.6rem;
+}
+
+.recording-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(12, 12, 20, 0.88);
+  border: 1px solid rgba(255, 68, 102, 0.5);
+  color: #ffdce3;
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: recPulse 0.9s infinite;
+}
+
+.record-timer {
+  color: #fff;
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.recorded-preview-wrap {
+  margin-top: 0.9rem;
+}
+
+@keyframes recPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
+}
+
+.record-controls {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.record-controls .btn {
+  flex: 1;
 }
 
 .btn {
@@ -484,6 +572,31 @@ footer {
   padding: 1.5rem 1.25rem;
   padding-bottom: max(1.5rem, calc(env(safe-area-inset-bottom) + 1rem));
   background: linear-gradient(to top, var(--overlay-bg) 60%, transparent 100%);
+}
+
+.sop-picker {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+
+.sop-select {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+}
+
+.btn-load-sop {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.8rem;
 }
 
 .status-line {
