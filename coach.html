@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>SkillLens — Coaching</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body style="background:#000; overflow:hidden;">
+  <div class="coach-wrapper">
+    <!-- Camera Feed -->
+    <video id="camera" autoplay playsinline muted></video>
+
+    <!-- Top Bar -->
+    <div class="coach-topbar">
+      <a href="index.html" class="back-btn" aria-label="Exit">&times;</a>
+      <span class="coach-title">
+        <span id="statusDot" class="status-dot live"></span>
+        SkillLens
+      </span>
+      <span id="stepBadge" class="step-badge">Step 1 / 10</span>
+    </div>
+
+    <!-- Bottom Overlay -->
+    <div class="coach-overlay">
+      <div id="instruction" class="instruction-text">
+        Initializing camera...
+      </div>
+      <div class="coach-controls">
+        <button id="nextBtn" class="btn-next">Next Step &rarr;</button>
+        <button id="pauseBtn" class="btn-pause" title="Pause">&#9208;</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/gemini.js"></script>
+  <script src="js/sop-barista.js"></script>
+  <script src="js/coach.js"></script>
+</body>
+</html>

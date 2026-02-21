@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#06060b">
+  <title>SkillLens — Create SOP</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="extract-container">
+    <div class="page-header">
+      <a href="index.html" class="back-btn" aria-label="Back">&larr;</a>
+      <h1>Create SOP</h1>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <div class="form-group">
+      <label for="contentInput">Training Content</label>
+      <textarea
+        id="contentInput"
+        placeholder="Paste a YouTube transcript, training manual excerpt, or any step-by-step procedure description here...
+
+Example: 'First, remove the portafilter from the machine. Knock out any old grounds. Then flush the group head briefly with hot water...'"
+      ></textarea>
+    </div>
+
+    <button id="generateBtn" class="btn btn-primary">Generate SOP</button>
+
+    <div id="spinner" class="spinner">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <p class="mt-1" style="font-size:0.85rem;">Analyzing content and building your SOP...</p>
+    </div>
+
+    <div id="sopPreview" class="sop-preview">
+      <h2 id="sopTitle">Generated SOP</h2>
+      <div id="sopSteps"></div>
+      <div class="sop-actions">
+        <button id="editSop" class="btn btn-secondary">Edit</button>
+        <button id="startCoaching" class="btn btn-primary">Start Coaching</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/gemini.js"></script>
+  <script src="js/extract.js"></script>
+</body>
+</html>
