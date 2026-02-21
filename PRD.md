@@ -1,146 +1,230 @@
-# SkillLens — Product Requirements Document
-### Hackathon Build | v1.0
+# SkillLens Product Requirements Document (PRD)
+
+## 1) Product Vision & Core Idea
+
+**SkillLens** is an AI coaching assistant for physical work. A user points their phone camera at equipment (e.g., espresso machine), and SkillLens identifies where they are in a workflow and gives the next instruction in real time.
+
+### Problem
+- Frontline training is often inconsistent, expensive, and hard to scale.
+- New workers need in-the-moment support, not just a static manual.
+
+### Core idea we are building
+- "Mentor in your pocket" for step-by-step operational guidance.
+- Combine camera frames + SOP context + AI reasoning to guide actions live.
 
 ---
 
-## Problem
+## 2) Hackathon Context & Success Criteria
 
-Blue-collar onboarding is broken. Tradespeople — baristas, plumbers, electricians, solar installers — are trained through documentation, written tests, and classroom sessions before they're ever allowed on site. The result is a slow, expensive pipeline that separates learning from doing. Trainees absorb theory in isolation, then are thrown into the physical job and expected to perform.
+### Hackathon framing
+This project is a hackathon submission focused on proving product value quickly with a working demo and clear path to production hardening.
 
-The better model — learning while doing — has always been blocked by one constraint: there's no guide standing next to you at all times. SkillLens removes that constraint.
+### Hackathon criteria this PRD must support
+- **Demo clarity:** judges can understand value in under 60 seconds.
+- **Functional prototype:** end-to-end flow works on a phone browser.
+- **AI relevance:** AI materially improves the training experience (not cosmetic).
+- **Practical impact:** solves a real onboarding/training pain point.
+- **Execution quality:** usable UX, coherent architecture, clear trade-offs.
 
----
-
-## Solution
-
-SkillLens is a mobile-first AI coaching layer that watches what you're doing through your phone camera and tells you what to do next, in real time.
-
-Point your phone at a coffee machine, a boiler, a circuit panel, or a solar inverter. SkillLens identifies where you are in the workflow and delivers the next instruction as a clean overlay on your screen. As you move and the scene changes, it updates. You learn by doing, with a mentor in your pocket.
-
----
-
-## Target Users
-
-**Primary:** Trainees in physical, procedural trades — hospitality, construction, renewables, facilities management. Typically 18–30, comfortable with mobile, time-poor, learning on their feet.
-
-**Secondary:** Training managers and employers who need to reduce the cost and duration of onboarding, and want visibility into trainee progress without being physically present.
+### Demo scenario (current)
+- Barista onboarding workflow (espresso preparation) as the default demonstration.
 
 ---
 
-## Hackathon Scope (v0)
+## 3) Product Requirements (MVP)
 
-The demo focuses on a single, compelling use case: **barista onboarding**. This is deliberately chosen because it is universally relatable to judges, visually interesting on camera, and procedurally complex enough to demonstrate real value.
+### User stories
+- As a trainee, I can open the app on my phone and get guided instructions while doing a task.
+- As a trainee, I can create a custom SOP from source text/transcript.
+- As a trainee, I can manually move to the next step if AI confidence is low.
+- As a trainer/manager, I can trust that guidance follows an SOP structure.
 
-The demo shows a trainee standing at an espresso machine. The phone camera captures the scene. SkillLens overlays step-by-step instructions that update as the trainee progresses through making an espresso — from grounds to cup.
+### Functional requirements
+1. User can enter setup credentials/config and start the app quickly.
+2. App can capture camera frames periodically.
+3. App can generate SOP steps from pasted source content.
+4. App can analyze current frame against SOP context and return next instruction.
+5. App displays current/next step overlay with simple controls.
+6. App supports a prebuilt demo SOP (barista flow).
 
----
-
-## Core Features (v0)
-
-### 1. Live Vision Coaching
-The camera feed is sent to Gemini 2.0 Flash every 2 seconds. Gemini is primed with a structured Standard Operating Procedure (SOP) for the task. It identifies the current state of the scene, matches it to the appropriate step in the SOP, and returns a single clear instruction. That instruction renders as an overlay on the live camera view.
-
-### 2. SOP Extraction Pipeline
-Before the session, a coach or training manager pastes a YouTube tutorial URL. SkillLens extracts the video transcript, sends it to Gemini, and generates a structured JSON SOP — a numbered sequence of steps with descriptions, what to look for, and common mistakes. This SOP is embedded into the system prompt for the live session.
-
-### 3. Manual Step Advance
-A "Next Step" button allows the trainee to manually progress if the AI misreads the scene. This is the safety net for demo reliability and a genuine UX feature — trainees shouldn't be blocked by a false negative.
-
-### 4. Mobile-First Full-Screen UI
-The app runs entirely in the mobile browser. No install required. Full-screen camera feed with a semi-transparent instruction panel at the bottom. Large, readable text. Designed for one-handed operation in a physical environment.
-
----
-
-## Technical Architecture
-
-| Layer | Choice | Rationale |
-|---|---|---|
-| Frontend | Vanilla HTML/JS | Zero setup, runs anywhere, no build step |
-| Camera | `getUserMedia` API | Native browser, no permissions friction |
-| AI Vision | Gemini 2.0 Flash | Multimodal, fast (<1s), generous free tier |
-| SOP Extraction | Gemini 2.0 Flash (text) | Same API, batch process before session |
-| Hosting | Vercel / GitHub Pages | One-command deploy, shareable URL |
-| Demo capture | Phone screen record | Native POV, no extra hardware |
-
-**Data flow:**
-1. Browser captures video frame every 2 seconds
-2. Frame converted to base64 JPEG
-3. POST to Gemini API with frame + system prompt (SOP + task context)
-4. Response text rendered to overlay div
-5. Previous instruction fades, new instruction appears
+### Non-functional requirements
+- Mobile-first UX (readable overlay, one-handed use).
+- Fast response loop suitable for live guidance.
+- Graceful fallback when model uncertainty is high.
+- Clear error states for camera/network/API issues.
 
 ---
 
-## System Prompt Design
+## 4) Goals of This Update (Architecture Restructure)
 
-The quality of the experience lives in the prompt. The production prompt structure is:
+- Move from a static vanilla JS app to a maintainable TypeScript full-stack setup.
+- Keep developer onboarding simple (single package manager, clear scripts, low cognitive overhead).
+- Preserve current product behavior while enabling future features (auth, saved SOPs, analytics, role-based experiences).
 
+---
+
+## 5) Recommended Tech Stack (Beginner-Friendly)
+
+### Frontend
+- **Framework:** Next.js (App Router)
+- **Language:** TypeScript
+- **Styling (default):** CSS Modules + global CSS (plain CSS)
+- **Styling (optional):** Tailwind CSS only if team explicitly prefers utility-first workflow
+- **State/Data:** React Query for server state; simple local state with React hooks
+
+### Backend
+- **Framework:** NestJS (TypeScript-first)
+- **API style:** REST (clear and beginner-friendly)
+- **Validation:** class-validator + class-transformer
+- **Persistence:** PostgreSQL + Prisma ORM
+
+### Shared Tooling
+- **Monorepo:** Turborepo (or npm workspaces if team wants less tooling)
+- **Lint/Format:** ESLint + Prettier
+- **Tests:** Vitest (frontend unit), Jest (backend unit/e2e)
+- **Runtime/package manager:** Node 20 LTS + pnpm
+
+### Why this stack
+- TypeScript end-to-end reduces context-switching for beginners.
+- Next.js has strong docs, easy local dev, and straightforward deployment.
+- NestJS provides backend structure out-of-the-box (modules/controllers/services), which helps junior developers avoid ad-hoc architecture.
+- Plain CSS keeps the migration close to the current codebase, lowers abstraction overhead for new contributors, and avoids adding another required styling framework.
+
+### Styling decision for this team
+- Start with **normal CSS** (CSS Modules + shared global stylesheet) as the default for beginner onboarding.
+- Revisit Tailwind in a later ADR if the team starts building a large shared design system and wants utility-class speed.
+
+---
+
+## 6) Proposed Repository Structure
+
+```text
+skilllens/
+  apps/
+    web/                  # Next.js frontend (TypeScript)
+    api/                  # NestJS backend (TypeScript)
+  packages/
+    ui/                   # Shared UI components (optional phase 2)
+    types/                # Shared TS types/contracts
+    eslint-config/        # Shared linting presets
+    tsconfig/             # Shared TS configs
+  docs/
+    PRD.md
+    ADRs/                 # Architecture Decision Records
+  .env.example
+  package.json
+  pnpm-workspace.yaml
+  turbo.json
 ```
-You are an expert [role] trainer guiding a trainee in real time.
-The trainee is working through the following standard procedure:
-
-[SOP JSON — numbered steps with descriptions]
-
-I will send you a camera frame every 2 seconds.
-
-Your job:
-1. Look at the image and identify which step the trainee appears to be on.
-2. Respond with ONLY their next instruction in one short, clear sentence.
-3. Be encouraging and specific.
-4. If the image is unclear, ask them to show you the relevant part of the equipment.
-5. Never repeat the same instruction twice in a row.
-6. If they appear to have completed all steps, congratulate them.
-```
 
 ---
 
-## Demo Script
+## 7) High-Level Responsibilities
 
-**Setup:** Phone propped or held pointing at an espresso machine. App open in Safari/Chrome. Screen record running.
+### Frontend (`apps/web`)
+- Camera permissions + preview
+- Coaching overlay UI and step controls
+- SOP create/edit screens
+- Calls backend endpoints for SOP generation and coaching inference
 
-**Flow:**
-- Open app → camera activates → "Point your camera at the coffee machine to begin"
-- Show portafilter → overlay: "Remove the portafilter and knock out any used grounds"
-- Show group head → overlay: "Rinse the group head with a short flush"
-- Show grinder → overlay: "Grind a fresh dose — aim for 18g"
-- Continue through tamping, extraction, milk steaming
-- Final shot pulled → overlay: "Your espresso is ready. Nice work."
-
-**Video:** Screen-recorded on phone, 90 seconds, voiceover optional. Upload to GitHub repo `/demo`.
-
----
-
-## Out of Scope (v0)
-
-The following are genuine product directions but excluded from the hackathon build to protect delivery:
-
-- User accounts and progress tracking
-- Multi-trade SOP library
-- Voice output / audio instructions
-- Wearable / AR glasses integration
-- Employer dashboard and analytics
-- Offline mode
+### Backend (`apps/api`)
+- Securely manages Gemini interaction (no direct client exposure)
+- SOP extraction endpoint
+- Live coaching frame analysis endpoint
+- Request validation, rate-limiting, audit logs
+- Stores SOPs/sessions for future analytics and history
 
 ---
 
-## Longer-Term Vision
+## 8) API Design (Initial)
 
-SkillLens is infrastructure for physical work. Every procedural trade has a body of YouTube tutorials, training manuals, and institutional knowledge that currently lives in people's heads. SkillLens turns that knowledge into a deployable coaching layer that travels with the trainee.
+- `POST /api/sop/extract`
+  - Input: free-text training content
+  - Output: normalized SOP steps
 
-The glasses form factor — Meta Ray-Ban, or purpose-built AR — is the natural endpoint. Hands-free, persistent overlay, voice I/O. The phone demo is a proof of concept for the AI layer. The hardware will catch up.
+- `POST /api/coach/analyze-frame`
+  - Input: image frame + SOP context + current step
+  - Output: detected step, confidence, next instruction
 
-The business model is B2B: sell to employers, training providers, and trade bodies who want to reduce onboarding time and cost at scale. A solar installer firm onboarding 50 engineers a year, a hospitality group training 200 bar staff — these are the customers. The trainee experience is the product. The employer ROI is the pitch.
+- `POST /api/session`
+  - Input: workflow metadata
+  - Output: session id
+
+- `POST /api/session/:id/events`
+  - Input: user actions (next step, retry, completion)
+  - Output: ack
 
 ---
 
-## Success Criteria (Hackathon)
+## 9) Environment & Security Requirements
 
-- Live demo works end-to-end on a real coffee machine
-- Gemini correctly identifies at least 5 distinct steps in sequence
-- Demo video is under 2 minutes and tells a clear story
-- GitHub repo is clean, README explains setup in under 5 minutes
-- A non-technical judge can understand the value in 30 seconds
+- Gemini API key must live on the backend only (not in browser local storage).
+- Use environment variables:
+  - `GEMINI_API_KEY`
+  - `DATABASE_URL`
+  - `NEXT_PUBLIC_API_BASE_URL`
+- Add request size limits for image uploads.
+- Add basic rate limiting for public endpoints.
 
 ---
 
-*Built at TechEurope London Hackathon | February 2026*
+## 10) Migration Plan (Incremental)
+
+### Phase 0: Foundation
+- Create monorepo scaffold (`apps/web`, `apps/api`).
+- Add linting, formatting, shared tsconfig, CI checks.
+
+### Phase 1: Frontend migration
+- Recreate existing screens in Next.js:
+  - landing
+  - SOP extraction
+  - coaching view
+- Preserve existing UX and copy.
+
+### Phase 2: Backend integration
+- Move Gemini calls from browser JS into NestJS services.
+- Implement `/sop/extract` and `/coach/analyze-frame`.
+- Connect frontend to backend API.
+
+### Phase 3: Persistence & quality
+- Add Prisma models for SOPs, sessions, and events.
+- Add unit/e2e tests and error monitoring.
+
+### Phase 4: Developer experience hardening
+- Add pre-commit hooks (lint + format checks).
+- Add seeded sample SOP data for local demos.
+- Improve docs for onboarding in under 15 minutes.
+
+---
+
+## 11) Definition of Done (Restructure Epic)
+
+- Repo follows frontend/backend monorepo layout.
+- Frontend and backend are both TypeScript.
+- No direct Gemini API calls from browser.
+- Existing hackathon demo flow works end-to-end through backend APIs.
+- New developer can run project locally with:
+  - `pnpm install`
+  - `pnpm dev`
+- Basic tests and lint checks pass in CI.
+
+---
+
+## 12) Beginner Onboarding Checklist
+
+- Keep setup to <= 5 commands.
+- Provide copy-paste `.env.example` with comments.
+- Include architecture diagram in docs.
+- Include “first task” guide:
+  - add a field to SOP response
+  - display it on coaching screen
+  - run tests
+
+---
+
+## 13) Out of Scope (for this restructure step)
+
+- Native mobile apps
+- Advanced auth/SSO
+- Multi-tenant enterprise controls
+- Complex event streaming infrastructure
