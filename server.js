@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { URL } = require('url');
 
 loadEnvFromFile(path.join(process.cwd(), '.env'));
@@ -12,6 +13,7 @@ const DUST_BASE_URL = process.env.DUST_BASE_URL || 'https://dust.tt';
 const DUST_WORKSPACE_ID = process.env.DUST_WORKSPACE_ID || '';
 const DUST_API_KEY = process.env.DUST_API_KEY || '';
 const DUST_AGENT_ID = process.env.DUST_AGENT_ID || '';
+const DEBUG_DUST = process.env.DEBUG_DUST !== '0';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -28,6 +30,10 @@ const MIME_TYPES = {
 const server = http.createServer(async (req, res) => {
   try {
     const reqUrl = new URL(req.url, `http://${req.headers.host}`);
+    const isApiCall = reqUrl.pathname.startsWith('/api/');
+    if (isApiCall && DEBUG_DUST) {
+      logDebug('http', `${req.method} ${reqUrl.pathname}`);
+    }
 
     if (req.method === 'POST' && reqUrl.pathname === '/api/sop/generate') {
       return handleSopGenerate(req, res);
@@ -56,15 +62,21 @@ server.listen(PORT, () => {
 });
 
 async function handleSopGenerate(req, res) {
+  const traceId = createTraceId();
+  const startedAt = Date.now();
+
   if (!DUST_WORKSPACE_ID || !DUST_API_KEY || !DUST_AGENT_ID) {
+    logDebug('dust', `[${traceId}] Missing Dust config.`);
     return sendJson(res, 500, {
-      error: 'Dust is not configured. Set DUST_WORKSPACE_ID, DUST_API_KEY, and DUST_AGENT_ID.'
+      error: 'Dust is not configured. Set DUST_WORKSPACE_ID, DUST_API_KEY, and DUST_AGENT_ID.',
+      traceId
     });
   }
 
   const body = await readJsonBody(req, 10 * 1024 * 1024);
   if (!body) {
-    return sendJson(res, 400, { error: 'Invalid JSON body.' });
+    logDebug('dust', `[${traceId}] Invalid JSON body.`);
+    return sendJson(res, 400, { error: 'Invalid JSON body.', traceId });
   }
 
   const mode = body.mode || 'text';
@@ -74,10 +86,15 @@ async function handleSopGenerate(req, res) {
   const frames = Array.isArray(body.frames) ? body.frames.filter((f) => typeof f === 'string') : [];
 
   if (mode === 'text' && !inputText.trim()) {
-    return sendJson(res, 400, { error: 'Text mode requires `text`.' });
+    logDebug('dust', `[${traceId}] Text mode with empty input.`);
+    return sendJson(res, 400, { error: 'Text mode requires `text`.', traceId });
   }
 
   try {
+    logDebug(
+      'dust',
+      `[${traceId}] Request accepted mode=${mode} textLen=${inputText.length} contextLen=${context.length} frames=${frames.length} accountId=${accountId}`
+    );
     const userMessage = buildDustMessage({
       mode,
       context,
@@ -85,19 +102,22 @@ async function handleSopGenerate(req, res) {
       frames
     });
 
-    const { conversationId, messageId } = await createDustConversation(userMessage);
-    const answer = await waitForDustAnswer(conversationId, messageId, 90_000);
+    const { conversationId, messageId, answer: immediateAnswer } = await createDustConversation(userMessage, traceId);
+    const answer = immediateAnswer || await waitForDustAnswer(conversationId, messageId, 90_000, traceId);
     const sop = parseSopFromAgent(answer);
+    logDebug('dust', `[${traceId}] SOP parsed successfully in ${Date.now() - startedAt}ms`);
 
     return sendJson(res, 200, {
       ok: true,
       accountId,
-      sop
+      sop,
+      traceId
     });
   } catch (err) {
-    console.error('[dust] SOP generation failed:', err);
+    console.error(`[dust] [${traceId}] SOP generation failed:`, err);
     return sendJson(res, 500, {
-      error: err.message || 'Failed to generate SOP via Dust.'
+      error: err.message || 'Failed to generate SOP via Dust.',
+      traceId
     });
   }
 }
@@ -141,11 +161,16 @@ function buildDustMessage({ mode, context, inputText, frames }) {
   ].join('\n');
 }
 
-async function createDustConversation(content) {
+async function createDustConversation(content, traceId) {
   const url = `${DUST_BASE_URL}/api/v1/w/${encodeURIComponent(DUST_WORKSPACE_ID)}/assistant/conversations`;
+  logDebug(
+    'dust',
+    `[${traceId}] createConversation workspace=${DUST_WORKSPACE_ID} agentId=${DUST_AGENT_ID} baseUrl=${DUST_BASE_URL}`
+  );
   const payload = {
     title: null,
     visibility: 'unlisted',
+    blocking: true,
     message: {
       content,
       mentions: [{ configurationId: DUST_AGENT_ID }],
@@ -169,24 +194,60 @@ async function createDustConversation(content) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    logDebug('dust', `[${traceId}] createConversation failed status=${res.status} body=${safeStringify(data)}`);
     throw new Error(`Dust createConversation failed (${res.status}): ${safeStringify(data)}`);
   }
 
-  const conversationId = data?.conversation?.sId || data?.conversation?.id;
-  const messageId = data?.message?.sId || data?.message?.id;
-  if (!conversationId || !messageId) {
-    throw new Error('Dust conversation response missing conversation/message IDs.');
+  const conversationId =
+    pickFirstId(
+      data?.conversation?.sId,
+      data?.conversation?.id,
+      data?.conversationId,
+      data?.conversation?.conversationId
+    );
+  const agentMessageId = pickFirstId(
+    data?.agentMessage?.sId,
+    data?.agentMessage?.id,
+    data?.agentMessages?.[0]?.sId,
+    data?.agentMessages?.[0]?.id
+  );
+  const messageId = pickFirstId(
+    agentMessageId,
+    data?.message?.sId,
+    data?.message?.id,
+    data?.messages?.[0]?.sId,
+    data?.messages?.[0]?.id,
+    data?.conversation?.message?.sId,
+    data?.conversation?.message?.id,
+    data?.conversation?.messages?.[0]?.sId,
+    data?.conversation?.messages?.[0]?.id
+  );
+  const answer = extractDustAnswerFromCreateResponse(data);
+  if (!conversationId) {
+    throw new Error('Dust conversation response missing conversation ID.');
+  }
+  if (!answer && !messageId) {
+    throw new Error(`Dust conversation response missing agent message ID and immediate answer. Body: ${safeStringify(data)}`);
   }
 
-  return { conversationId, messageId };
+  logDebug(
+    'dust',
+    `[${traceId}] createConversation success conversationId=${conversationId} messageId=${messageId} immediateAnswer=${Boolean(answer)}`
+  );
+  return { conversationId, messageId, answer };
 }
 
-async function waitForDustAnswer(conversationId, messageId, timeoutMs) {
+async function waitForDustAnswer(conversationId, messageId, timeoutMs, traceId) {
   const startedAt = Date.now();
   let combinedText = '';
+  let pollCount = 0;
 
   while (Date.now() - startedAt < timeoutMs) {
-    const events = await getDustMessageEvents(conversationId, messageId);
+    pollCount += 1;
+    const events = await getDustMessageEvents(conversationId, messageId, traceId, pollCount);
+    if (events.length) {
+      logDebug('dust', `[${traceId}] poll=${pollCount} events=${events.map((e) => e.type).join(',')}`);
+    }
     for (const event of events) {
       if (event.type === 'user_message_error' || event.type === 'agent_error') {
         throw new Error(event?.error?.message || 'Dust agent returned an error event.');
@@ -195,6 +256,7 @@ async function waitForDustAnswer(conversationId, messageId, timeoutMs) {
         combinedText += event.text;
       }
       if (event.type === 'agent_message_success') {
+        logDebug('dust', `[${traceId}] agent_message_success after ${Date.now() - startedAt}ms`);
         return event?.message?.content || combinedText || '';
       }
     }
@@ -203,16 +265,18 @@ async function waitForDustAnswer(conversationId, messageId, timeoutMs) {
   }
 
   if (combinedText.trim()) return combinedText.trim();
+  logDebug('dust', `[${traceId}] Timed out after ${timeoutMs}ms waiting for Dust response`);
   throw new Error('Timed out waiting for Dust agent response.');
 }
 
-async function getDustMessageEvents(conversationId, messageId) {
+async function getDustMessageEvents(conversationId, messageId, traceId, pollCount) {
   const url = `${DUST_BASE_URL}/api/v1/w/${encodeURIComponent(DUST_WORKSPACE_ID)}/assistant/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/events`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${DUST_API_KEY}` }
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    logDebug('dust', `[${traceId}] events failed poll=${pollCount} status=${res.status} body=${safeStringify(data)}`);
     throw new Error(`Dust events fetch failed (${res.status}): ${safeStringify(data)}`);
   }
   if (Array.isArray(data)) return data;
@@ -222,10 +286,12 @@ async function getDustMessageEvents(conversationId, messageId) {
 
 function parseSopFromAgent(text) {
   const raw = String(text || '').trim();
+  logDebug('dust', `Raw agent response (${raw.length} chars): ${truncateForLog(raw, 4000)}`);
   const clean = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
   try {
     return JSON.parse(clean);
   } catch {
+    logDebug('dust', `parseSopFromAgent primary JSON parse failed. Attempting brace extraction.`);
     const match = clean.match(/\{[\s\S]*\}/);
     if (!match) {
       throw new Error('Dust response was not valid JSON.');
@@ -298,6 +364,53 @@ function safeStringify(value) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractDustAnswerFromCreateResponse(data) {
+  const candidates = [
+    data?.agentMessage?.content,
+    data?.AgentMessage?.content,
+    data?.agentMessages?.[0]?.content,
+    data?.message?.content,
+    data?.messages?.[0]?.content,
+    data?.conversation?.message?.content,
+    data?.conversation?.messages?.[0]?.content,
+    data?.output?.content,
+    data?.answer,
+    data?.output
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return '';
+}
+
+function pickFirstId(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const asString = String(value).trim();
+    if (asString) return asString;
+  }
+  return '';
+}
+
+function truncateForLog(text, maxLen) {
+  const value = String(text || '');
+  if (value.length <= maxLen) return value;
+  return `${value.slice(0, maxLen)}... [truncated ${value.length - maxLen} chars]`;
+}
+
+function createTraceId() {
+  return crypto.randomBytes(6).toString('hex');
+}
+
+function logDebug(scope, message) {
+  if (!DEBUG_DUST) return;
+  const stamp = new Date().toISOString();
+  console.log(`[${stamp}] [${scope}] ${message}`);
 }
 
 function loadEnvFromFile(filePath) {

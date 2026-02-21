@@ -1,7 +1,11 @@
 // Gemini API wrapper for SkillLens
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-1.5-flash'
+];
 
 class GeminiClient {
   constructor(apiKey) {
@@ -9,8 +13,6 @@ class GeminiClient {
   }
 
   async generateText(systemPrompt, userMessage, options = {}) {
-    const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`;
-
     const body = {
       systemInstruction: {
         parts: [{ text: systemPrompt }]
@@ -20,28 +22,16 @@ class GeminiClient {
       }],
       generationConfig: {
         temperature: options.temperature ?? 0.4,
-        maxOutputTokens: options.maxTokens ?? 2048
+        maxOutputTokens: options.maxTokens ?? 2048,
+        responseMimeType: 'application/json'
       }
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Gemini API error (${res.status}): ${errText}`);
-    }
-
-    const data = await res.json();
+    const data = await this.generateWithModelFallback(body);
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
   }
 
   async analyzeImage(systemPrompt, userMessage, imageBase64, options = {}) {
-    const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`;
-
     const body = {
       systemInstruction: {
         parts: [{ text: systemPrompt }]
@@ -54,55 +44,16 @@ class GeminiClient {
       }],
       generationConfig: {
         temperature: options.temperature ?? 0.3,
-        maxOutputTokens: options.maxTokens ?? 150
+        maxOutputTokens: options.maxTokens ?? 150,
+        responseMimeType: 'application/json'
       }
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Gemini API error (${res.status}): ${errText}`);
-    }
-
-    const data = await res.json();
+    const data = await this.generateWithModelFallback(body);
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
   }
 
-  async analyzeAudio(prompt, audioBase64, mimeType) {
-    const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`;
-
-    const body = {
-      contents: [{
-        parts: [
-          { text: prompt },
-          { inlineData: { mimeType, data: audioBase64 } }
-        ]
-      }],
-      generationConfig: { temperature: 0, maxOutputTokens: 10 }
-    };
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Gemini API error (${res.status}): ${errText}`);
-    }
-
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'none';
-  }
-
   async analyzeImages(systemPrompt, userMessage, imagesBase64, options = {}) {
-    const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`;
     const imageParts = (imagesBase64 || []).map((imageBase64) => ({
       inlineData: { mimeType: 'image/jpeg', data: imageBase64 }
     }));
@@ -119,22 +70,57 @@ class GeminiClient {
       }],
       generationConfig: {
         temperature: options.temperature ?? 0.3,
-        maxOutputTokens: options.maxTokens ?? 2048
+        maxOutputTokens: options.maxTokens ?? 2048,
+        responseMimeType: 'application/json'
       }
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
+    const data = await this.generateWithModelFallback(body);
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  }
 
-    if (!res.ok) {
+  async analyzeAudio(prompt, audioBase64, mimeType) {
+    const body = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: audioBase64 } }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 10,
+        responseMimeType: 'text/plain'
+      }
+    };
+
+    const data = await this.generateWithModelFallback(body);
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'none';
+  }
+
+  async generateWithModelFallback(body) {
+    let lastErr = null;
+
+    for (const model of GEMINI_MODELS) {
+      const url = `${GEMINI_BASE}/${model}:generateContent?key=${this.apiKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) {
+        return res.json();
+      }
+
       const errText = await res.text();
-      throw new Error(`Gemini API error (${res.status}): ${errText}`);
+      lastErr = new Error(`Gemini API error (${res.status}) [${model}]: ${errText}`);
+      const shouldTryNextModel = res.status === 404 || res.status === 400 || res.status === 403;
+      if (!shouldTryNextModel) {
+        throw lastErr;
+      }
     }
 
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    throw lastErr || new Error('Gemini API error: no models available.');
   }
 }
