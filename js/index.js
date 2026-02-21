@@ -40,13 +40,8 @@
 
   const extractCard = document.getElementById('extractCard');
   if (extractCard) {
-    extractCard.addEventListener('click', (e) => {
-      const key = localStorage.getItem('skilllens_api_key');
-      if (!key) {
-        e.preventDefault();
-        showStatus('Set your API key first', 'missing');
-        keyInput.focus();
-      }
+    extractCard.addEventListener('click', () => {
+      showStatus('SOP generation uses server-side Dust configuration', 'saved');
     });
   }
 
