@@ -6,1007 +6,324 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>TACTICAL HUD</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap');
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  :root {
-    --cyan: #00f0ff;
-    --cyan-dim: rgba(0, 240, 255, 0.4);
-    --cyan-glow: rgba(0, 240, 255, 0.15);
-    --cyan-ultra-dim: rgba(0, 240, 255, 0.07);
-    --amber: #ffaa00;
-    --amber-dim: rgba(255, 170, 0, 0.5);
-    --red: #ff3344;
-    --green: #00ff88;
-    --white: rgba(255, 255, 255, 0.9);
-    --white-dim: rgba(255, 255, 255, 0.3);
-    --panel-bg: rgba(0, 10, 20, 0.55);
-    --panel-border: rgba(0, 240, 255, 0.2);
-    --font-mono: 'Share Tech Mono', monospace;
-    --font-display: 'Orbitron', sans-serif;
-  }
-
-  html, body {
-    height: 100%;
-    overflow: hidden;
-    background: #000;
-    font-family: var(--font-mono);
-    color: var(--cyan);
-    -webkit-font-smoothing: antialiased;
-    cursor: none;
-  }
-
-  /* ═══ CAMERA ═══ */
-  #cameraFeed {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    z-index: 0;
-  }
-
-  /* Scanline overlay */
-  .scanlines {
-    position: fixed;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0, 0, 0, 0.03) 2px,
-      rgba(0, 0, 0, 0.03) 4px
-    );
-  }
-
-  /* Vignette */
-  .vignette {
-    position: fixed;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
-  }
-
-  /* ═══ HUD LAYER ═══ */
-  .hud {
-    position: fixed;
-    inset: 0;
-    z-index: 10;
-    pointer-events: none;
-    overflow: hidden;
-  }
-
-  /* ═══ CORNER BRACKETS ═══ */
-  .corner {
-    position: absolute;
-    width: 60px;
-    height: 60px;
-    border-color: var(--cyan);
-    border-style: solid;
-    border-width: 0;
-    opacity: 0.7;
-    animation: cornerPulse 3s ease-in-out infinite;
-  }
-  .corner-tl { top: 20px; left: 20px; border-top-width: 2px; border-left-width: 2px; }
-  .corner-tr { top: 20px; right: 20px; border-top-width: 2px; border-right-width: 2px; }
-  .corner-bl { bottom: 20px; left: 20px; border-bottom-width: 2px; border-left-width: 2px; }
-  .corner-br { bottom: 20px; right: 20px; border-bottom-width: 2px; border-right-width: 2px; }
-
-  @keyframes cornerPulse {
-    0%, 100% { opacity: 0.5; }
-    50% { opacity: 1; }
-  }
-
-  /* Inner corners */
-  .corner-inner {
-    position: absolute;
-    width: 30px;
-    height: 30px;
-    border-color: var(--cyan-dim);
-    border-style: solid;
-    border-width: 0;
-  }
-  .corner-inner-tl { top: 35px; left: 35px; border-top-width: 1px; border-left-width: 1px; }
-  .corner-inner-tr { top: 35px; right: 35px; border-top-width: 1px; border-right-width: 1px; }
-  .corner-inner-bl { bottom: 35px; left: 35px; border-bottom-width: 1px; border-left-width: 1px; }
-  .corner-inner-br { bottom: 35px; right: 35px; border-bottom-width: 1px; border-right-width: 1px; }
-
-  /* ═══ TOP BAR ═══ */
-  .top-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 12px 20px;
-    padding-top: max(12px, env(safe-area-inset-top));
-  }
-
-  .top-left, .top-center, .top-right {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .top-center {
-    align-items: center;
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    top: 12px;
-    top: max(12px, env(safe-area-inset-top));
-  }
-
-  .top-right { align-items: flex-end; }
-
-  .label {
-    font-family: var(--font-display);
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--cyan-dim);
-    text-transform: uppercase;
-  }
-
-  .value {
-    font-size: 12px;
-    letter-spacing: 1px;
-    text-shadow: 0 0 8px var(--cyan-glow);
-  }
-
-  .system-title {
-    font-family: var(--font-display);
-    font-size: 14px;
-    font-weight: 900;
-    letter-spacing: 4px;
-    color: var(--cyan);
-    text-shadow: 0 0 20px var(--cyan-dim), 0 0 40px var(--cyan-ultra-dim);
-  }
-
-  .system-subtitle {
-    font-size: 9px;
-    letter-spacing: 3px;
-    color: var(--cyan-dim);
-    text-align: center;
-  }
-
-  .status-online {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    letter-spacing: 1px;
-  }
-
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 8px var(--green);
-    animation: statusPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes statusPulse {
-    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--green); }
-    50% { opacity: 0.5; box-shadow: 0 0 2px var(--green); }
-  }
-
-  /* ═══ COMPASS STRIP ═══ */
-  .compass-strip {
-    position: absolute;
-    top: 70px;
-    top: calc(max(12px, env(safe-area-inset-top)) + 58px);
-    left: 50%;
-    transform: translateX(-50%);
-    width: 280px;
-    height: 28px;
-    overflow: hidden;
-    border-left: 1px solid var(--cyan-dim);
-    border-right: 1px solid var(--cyan-dim);
-  }
-
-  .compass-strip::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid var(--cyan);
-    z-index: 2;
-    filter: drop-shadow(0 0 4px var(--cyan));
-  }
-
-  .compass-inner {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    font-size: 10px;
-    letter-spacing: 1px;
-    white-space: nowrap;
-    will-change: transform;
-  }
-
-  .compass-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 40px;
-    color: var(--cyan-dim);
-    font-size: 9px;
-  }
-
-  .compass-mark.cardinal {
-    color: var(--cyan);
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 11px;
-    text-shadow: 0 0 6px var(--cyan-dim);
-  }
-
-  .compass-tick {
-    width: 1px;
-    height: 8px;
-    background: var(--cyan-dim);
-    margin: 0 19px;
-  }
-
-  .compass-tick.major {
-    height: 14px;
-    background: var(--cyan);
-  }
-
-  /* ═══ CENTER RETICLE ═══ */
-  .reticle {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 200px;
-    height: 200px;
-  }
-
-  .reticle svg {
-    width: 100%;
-    height: 100%;
-    filter: drop-shadow(0 0 6px var(--cyan-dim));
-  }
-
-  .reticle-ring-outer {
-    fill: none;
-    stroke: var(--cyan);
-    stroke-width: 1;
-    opacity: 0.6;
-    transform-origin: center;
-    animation: rotateRing 12s linear infinite;
-  }
-
-  .reticle-ring-inner {
-    fill: none;
-    stroke: var(--cyan);
-    stroke-width: 1.5;
-    opacity: 0.8;
-    transform-origin: center;
-    animation: rotateRing 8s linear infinite reverse;
-  }
-
-  .reticle-ring-core {
-    fill: none;
-    stroke: var(--cyan);
-    stroke-width: 1;
-    opacity: 0.4;
-    transform-origin: center;
-    animation: rotateRing 20s linear infinite;
-  }
-
-  @keyframes rotateRing {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .reticle-crosshair {
-    stroke: var(--cyan);
-    stroke-width: 0.5;
-    opacity: 0.5;
-  }
-
-  .reticle-center-dot {
-    fill: var(--cyan);
-    opacity: 0.8;
-    animation: centerPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes centerPulse {
-    0%, 100% { opacity: 0.8; r: 2; }
-    50% { opacity: 0.3; r: 3; }
-  }
-
-  /* Reticle data arcs */
-  .arc-data {
-    fill: none;
-    stroke-width: 2;
-    stroke-linecap: round;
-    opacity: 0.6;
-  }
-
-  .arc-data-1 {
-    stroke: var(--cyan);
-    stroke-dasharray: 30 15 10 15;
-    transform-origin: center;
-    animation: rotateRing 6s linear infinite;
-  }
-
-  .arc-data-2 {
-    stroke: var(--amber);
-    stroke-dasharray: 20 30 5 20;
-    transform-origin: center;
-    animation: rotateRing 10s linear infinite reverse;
-  }
-
-  /* ═══ LEFT PANEL — TELEMETRY ═══ */
-  .panel-left {
-    position: absolute;
-    left: 16px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 130px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .telemetry-block {
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 2px;
-    padding: 6px 8px;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-  }
-
-  .telemetry-label {
-    font-family: var(--font-display);
-    font-size: 7px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--cyan-dim);
-    margin-bottom: 2px;
-  }
-
-  .telemetry-value {
-    font-size: 14px;
-    letter-spacing: 1px;
-    color: var(--cyan);
-    text-shadow: 0 0 8px var(--cyan-glow);
-  }
-
-  .telemetry-bar {
-    height: 2px;
-    background: var(--cyan-ultra-dim);
-    margin-top: 4px;
-    border-radius: 1px;
-    overflow: hidden;
-  }
-
-  .telemetry-bar-fill {
-    height: 100%;
-    background: var(--cyan);
-    border-radius: 1px;
-    transition: width 1s ease;
-    box-shadow: 0 0 6px var(--cyan-dim);
-  }
-
-  .telemetry-bar-fill.amber { background: var(--amber); box-shadow: 0 0 6px var(--amber-dim); }
-  .telemetry-bar-fill.green { background: var(--green); box-shadow: 0 0 6px rgba(0,255,136,0.5); }
-
-  /* ═══ RIGHT PANEL — SYSTEMS ═══ */
-  .panel-right {
-    position: absolute;
-    right: 16px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 130px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .sys-block {
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 2px;
-    padding: 6px 8px;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-  }
-
-  .sys-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 9px;
-    letter-spacing: 0.5px;
-    padding: 1px 0;
-  }
-
-  .sys-row .sys-label { color: var(--white-dim); }
-  .sys-row .sys-val { color: var(--cyan); }
-  .sys-row .sys-val.ok { color: var(--green); }
-  .sys-row .sys-val.warn { color: var(--amber); }
-
-  /* ═══ BOTTOM PANEL ═══ */
-  .bottom-bar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 12px 20px;
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-  }
-
-  .bottom-left, .bottom-right {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .bottom-right { align-items: flex-end; }
-
-  /* ═══ RADAR ═══ */
-  .radar-container {
-    position: absolute;
-    bottom: 60px;
-    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 48px);
-    left: 20px;
-    width: 90px;
-    height: 90px;
-  }
-
-  .radar-container svg {
-    width: 100%;
-    height: 100%;
-    filter: drop-shadow(0 0 4px var(--cyan-ultra-dim));
-  }
-
-  .radar-grid {
-    fill: none;
-    stroke: var(--cyan);
-    opacity: 0.15;
-  }
-
-  .radar-sweep {
-    transform-origin: center;
-    animation: radarSweep 4s linear infinite;
-  }
-
-  @keyframes radarSweep {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .radar-blip {
-    fill: var(--cyan);
-    opacity: 0;
-    animation: blip 4s ease-out infinite;
-  }
-
-  .radar-blip:nth-child(2) { animation-delay: 1.3s; }
-  .radar-blip:nth-child(3) { animation-delay: 2.7s; }
-
-  @keyframes blip {
-    0% { opacity: 0; }
-    10% { opacity: 1; }
-    100% { opacity: 0; }
-  }
-
-  /* ═══ THREAT GRID ═══ */
-  .threat-grid {
-    position: absolute;
-    bottom: 60px;
-    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 48px);
-    right: 20px;
-    width: 90px;
-    height: 90px;
-  }
-
-  .threat-grid svg {
-    width: 100%;
-    height: 100%;
-  }
-
-  .grid-line {
-    stroke: var(--cyan);
-    stroke-width: 0.5;
-    opacity: 0.12;
-  }
-
-  .grid-scan-h {
-    stroke: var(--cyan);
-    stroke-width: 1;
-    opacity: 0.6;
-    animation: scanH 3s ease-in-out infinite;
-  }
-
-  .grid-scan-v {
-    stroke: var(--cyan);
-    stroke-width: 1;
-    opacity: 0.6;
-    animation: scanV 4s ease-in-out infinite;
-  }
-
-  @keyframes scanH {
-    0%, 100% { transform: translateY(0); opacity: 0.6; }
-    50% { transform: translateY(80px); opacity: 0.2; }
-  }
-
-  @keyframes scanV {
-    0%, 100% { transform: translateX(0); opacity: 0.6; }
-    50% { transform: translateX(80px); opacity: 0.2; }
-  }
-
-  /* ═══ HORIZONTAL LINES ═══ */
-  .h-line {
-    position: absolute;
-    left: 90px;
-    right: 90px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--cyan-ultra-dim) 20%, var(--cyan-ultra-dim) 80%, transparent);
-  }
-
-  .h-line-top {
-    top: calc(max(12px, env(safe-area-inset-top)) + 55px);
-  }
-
-  .h-line-bottom {
-    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 42px);
-  }
-
-  /* ═══ SIDE TICKS ═══ */
-  .side-ticks {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .side-ticks-left { left: 8px; align-items: flex-start; }
-  .side-ticks-right { right: 8px; align-items: flex-end; }
-
-  .side-tick {
-    width: 4px;
-    height: 1px;
-    background: var(--cyan-dim);
-  }
-
-  .side-tick.long { width: 8px; background: var(--cyan); }
-
-  /* ═══ DATA STREAM (scrolling text) ═══ */
-  .data-stream {
-    position: absolute;
-    right: 155px;
-    top: 50%;
-    transform: translateY(-50%);
-    height: 200px;
-    width: 100px;
-    overflow: hidden;
-    opacity: 0.25;
-    font-size: 8px;
-    line-height: 1.6;
-    letter-spacing: 0.5px;
-    color: var(--cyan);
-    mask-image: linear-gradient(to bottom, transparent 0%, white 20%, white 80%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, white 20%, white 80%, transparent 100%);
-  }
-
-  .data-stream-content {
-    animation: scrollStream 20s linear infinite;
-  }
-
-  @keyframes scrollStream {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(-50%); }
-  }
-
-  /* ═══ BOOT SEQUENCE ═══ */
-  .boot-screen {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    background: #000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 0.8s ease;
-  }
-
-  .boot-screen.fade-out {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .boot-screen.hidden {
-    display: none;
-  }
-
-  .boot-text {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--cyan);
-    text-align: left;
-    width: 320px;
-    line-height: 1.8;
-  }
-
-  .boot-line {
-    opacity: 0;
-    animation: bootFadeIn 0.1s forwards;
-  }
-
-  @keyframes bootFadeIn {
-    to { opacity: 1; }
-  }
-
-  .boot-cursor {
-    display: inline-block;
-    width: 7px;
-    height: 14px;
-    background: var(--cyan);
-    animation: blink 0.6s step-end infinite;
-    vertical-align: middle;
-    margin-left: 2px;
-  }
-
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-  }
-
-  .boot-logo {
-    font-family: var(--font-display);
-    font-size: 28px;
-    font-weight: 900;
-    letter-spacing: 8px;
-    color: var(--cyan);
-    text-shadow: 0 0 30px var(--cyan-dim), 0 0 60px var(--cyan-ultra-dim);
-    margin-bottom: 40px;
-    opacity: 0;
-    animation: bootFadeIn 0.5s 0.2s forwards;
-  }
-
-  /* ═══ PERMISSION PROMPT ═══ */
-  .permission-prompt {
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    background: #000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-  }
-
-  .permission-prompt.hidden { display: none; }
-
-  .permission-icon {
-    width: 80px;
-    height: 80px;
-    border: 2px solid var(--cyan);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 32px;
-    animation: cornerPulse 2s ease-in-out infinite;
-  }
-
-  .permission-text {
-    font-family: var(--font-display);
-    font-size: 14px;
-    letter-spacing: 3px;
-    color: var(--cyan);
-    text-align: center;
-  }
-
-  .permission-sub {
-    font-size: 11px;
-    color: var(--cyan-dim);
-    letter-spacing: 1px;
-  }
-
-  .btn-activate {
-    font-family: var(--font-display);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 3px;
-    color: #000;
-    background: var(--cyan);
-    border: none;
-    padding: 14px 40px;
-    cursor: pointer;
-    text-transform: uppercase;
-    transition: all 0.2s;
-    pointer-events: auto;
-    box-shadow: 0 0 20px var(--cyan-dim), 0 0 40px var(--cyan-ultra-dim);
-  }
-
-  .btn-activate:hover {
-    box-shadow: 0 0 30px var(--cyan-dim), 0 0 60px var(--cyan-ultra-dim);
-    transform: scale(1.02);
-  }
-
-  .btn-activate:active { transform: scale(0.98); }
-
-  /* ═══ RESPONSIVE ═══ */
-  @media (max-width: 500px) {
-    .panel-left, .panel-right { display: none; }
-    .data-stream { display: none; }
-    .side-ticks { display: none; }
-
-    .reticle { width: 150px; height: 150px; }
-
-    .radar-container { width: 70px; height: 70px; }
-    .threat-grid { width: 70px; height: 70px; }
-
-    .corner { width: 40px; height: 40px; }
-    .corner-inner { width: 20px; height: 20px; }
-    .corner-inner-tl { top: 28px; left: 28px; }
-    .corner-inner-tr { top: 28px; right: 28px; }
-    .corner-inner-bl { bottom: 28px; left: 28px; }
-    .corner-inner-br { bottom: 28px; right: 28px; }
-
-    .h-line { left: 50px; right: 50px; }
-  }
-
-  @media (min-width: 501px) and (max-width: 800px) {
-    .panel-left { width: 100px; }
-    .panel-right { width: 100px; }
-    .data-stream { display: none; }
-  }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        cyan: '#00f0ff',
+        'cyan-dim': 'rgba(0, 240, 255, 0.4)',
+        'cyan-glow': 'rgba(0, 240, 255, 0.15)',
+        'cyan-ultra': 'rgba(0, 240, 255, 0.07)',
+        amber: '#ffaa00',
+        'amber-dim': 'rgba(255, 170, 0, 0.5)',
+        hud: {
+          red: '#ff3344',
+          green: '#00ff88',
+        },
+        'panel-bg': 'rgba(0, 10, 20, 0.55)',
+        'panel-border': 'rgba(0, 240, 255, 0.2)',
+      },
+      fontFamily: {
+        mono: ['"Share Tech Mono"', 'monospace'],
+        display: ['"Orbitron"', 'sans-serif'],
+      },
+      keyframes: {
+        cornerPulse: {
+          '0%, 100%': { opacity: '0.5' },
+          '50%': { opacity: '1' },
+        },
+        statusPulse: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.5' },
+        },
+        rotateSlow: {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        },
+        rotateSlowReverse: {
+          from: { transform: 'rotate(360deg)' },
+          to: { transform: 'rotate(0deg)' },
+        },
+        centerPulse: {
+          '0%, 100%': { opacity: '0.8' },
+          '50%': { opacity: '0.3' },
+        },
+        radarSweep: {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        },
+        blip: {
+          '0%': { opacity: '0' },
+          '10%': { opacity: '1' },
+          '100%': { opacity: '0' },
+        },
+        scanH: {
+          '0%, 100%': { transform: 'translateY(0)', opacity: '0.6' },
+          '50%': { transform: 'translateY(80px)', opacity: '0.2' },
+        },
+        scanV: {
+          '0%, 100%': { transform: 'translateX(0)', opacity: '0.6' },
+          '50%': { transform: 'translateX(80px)', opacity: '0.2' },
+        },
+        scrollStream: {
+          '0%': { transform: 'translateY(0)' },
+          '100%': { transform: 'translateY(-50%)' },
+        },
+        bootFadeIn: {
+          to: { opacity: '1' },
+        },
+        blink: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0' },
+        },
+      },
+      animation: {
+        'corner-pulse': 'cornerPulse 3s ease-in-out infinite',
+        'status-pulse': 'statusPulse 2s ease-in-out infinite',
+        'rotate-12': 'rotateSlow 12s linear infinite',
+        'rotate-8-rev': 'rotateSlowReverse 8s linear infinite',
+        'rotate-20': 'rotateSlow 20s linear infinite',
+        'rotate-6': 'rotateSlow 6s linear infinite',
+        'rotate-10-rev': 'rotateSlowReverse 10s linear infinite',
+        'center-pulse': 'centerPulse 2s ease-in-out infinite',
+        'radar-sweep': 'radarSweep 4s linear infinite',
+        blip: 'blip 4s ease-out infinite',
+        'scan-h': 'scanH 3s ease-in-out infinite',
+        'scan-v': 'scanV 4s ease-in-out infinite',
+        'scroll-stream': 'scrollStream 20s linear infinite',
+        'boot-fade': 'bootFadeIn 0.1s forwards',
+        'boot-fade-slow': 'bootFadeIn 0.5s 0.2s forwards',
+        blink: 'blink 0.6s step-end infinite',
+      },
+    },
+  },
+}
+</script>
 </head>
-<body>
+<body class="h-full overflow-hidden bg-black font-mono text-cyan antialiased cursor-none">
 
 <!-- Permission Prompt -->
-<div class="permission-prompt" id="permissionPrompt">
-  <div class="permission-icon">&#9673;</div>
-  <div class="permission-text">CAMERA ACCESS REQUIRED</div>
-  <div class="permission-sub">Tactical HUD requires visual feed</div>
-  <button class="btn-activate" id="btnActivate">INITIALIZE SYSTEM</button>
+<div id="permissionPrompt" class="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center gap-5">
+  <div class="w-20 h-20 border-2 border-cyan rounded-full flex items-center justify-center text-[32px] animate-corner-pulse">&#9673;</div>
+  <div class="font-display text-sm tracking-[3px] text-cyan text-center">CAMERA ACCESS REQUIRED</div>
+  <div class="text-[11px] text-cyan-dim tracking-wider">Tactical HUD requires visual feed</div>
+  <button id="btnActivate" class="font-display text-xs font-bold tracking-[3px] text-black bg-cyan border-none py-3.5 px-10 cursor-pointer uppercase transition-all duration-200 pointer-events-auto shadow-[0_0_20px_rgba(0,240,255,0.4),0_0_40px_rgba(0,240,255,0.07)] hover:shadow-[0_0_30px_rgba(0,240,255,0.4),0_0_60px_rgba(0,240,255,0.07)] hover:scale-[1.02] active:scale-[0.98]">INITIALIZE SYSTEM</button>
 </div>
 
 <!-- Boot Sequence -->
-<div class="boot-screen hidden" id="bootScreen">
-  <div class="boot-logo">TACNET v4.7</div>
-  <div class="boot-text" id="bootText"></div>
+<div id="bootScreen" class="hidden fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center transition-opacity duration-[800ms]">
+  <div class="font-display text-[28px] font-black tracking-[8px] text-cyan mb-10 opacity-0 animate-boot-fade-slow" style="text-shadow: 0 0 30px rgba(0,240,255,0.4), 0 0 60px rgba(0,240,255,0.07)">TACNET v4.7</div>
+  <div id="bootText" class="font-mono text-xs text-cyan text-left w-80 leading-[1.8]"></div>
 </div>
 
 <!-- Camera -->
-<video id="cameraFeed" autoplay playsinline muted></video>
+<video id="cameraFeed" class="fixed inset-0 w-full h-full object-cover z-0" autoplay playsinline muted></video>
 
-<!-- Overlays -->
-<div class="scanlines"></div>
-<div class="vignette"></div>
+<!-- Scanlines -->
+<div class="fixed inset-0 z-[1] pointer-events-none" style="background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px)"></div>
+
+<!-- Vignette -->
+<div class="fixed inset-0 z-[1] pointer-events-none" style="background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%)"></div>
 
 <!-- HUD -->
-<div class="hud" id="hud" style="opacity:0">
+<div id="hud" class="fixed inset-0 z-10 pointer-events-none overflow-hidden" style="opacity:0">
 
-  <!-- Corner brackets -->
-  <div class="corner corner-tl"></div>
-  <div class="corner corner-tr"></div>
-  <div class="corner corner-bl"></div>
-  <div class="corner corner-br"></div>
-  <div class="corner-inner corner-inner-tl"></div>
-  <div class="corner-inner corner-inner-tr"></div>
-  <div class="corner-inner corner-inner-bl"></div>
-  <div class="corner-inner corner-inner-br"></div>
+  <!-- Corner brackets (outer) -->
+  <div class="absolute top-5 left-5 w-[60px] h-[60px] border-t-2 border-l-2 border-cyan border-solid animate-corner-pulse max-[500px]:w-10 max-[500px]:h-10"></div>
+  <div class="absolute top-5 right-5 w-[60px] h-[60px] border-t-2 border-r-2 border-cyan border-solid animate-corner-pulse max-[500px]:w-10 max-[500px]:h-10"></div>
+  <div class="absolute bottom-5 left-5 w-[60px] h-[60px] border-b-2 border-l-2 border-cyan border-solid animate-corner-pulse max-[500px]:w-10 max-[500px]:h-10"></div>
+  <div class="absolute bottom-5 right-5 w-[60px] h-[60px] border-b-2 border-r-2 border-cyan border-solid animate-corner-pulse max-[500px]:w-10 max-[500px]:h-10"></div>
+
+  <!-- Corner brackets (inner) -->
+  <div class="absolute top-[35px] left-[35px] w-[30px] h-[30px] border-t border-l border-cyan-dim border-solid max-[500px]:top-7 max-[500px]:left-7 max-[500px]:w-5 max-[500px]:h-5"></div>
+  <div class="absolute top-[35px] right-[35px] w-[30px] h-[30px] border-t border-r border-cyan-dim border-solid max-[500px]:top-7 max-[500px]:right-7 max-[500px]:w-5 max-[500px]:h-5"></div>
+  <div class="absolute bottom-[35px] left-[35px] w-[30px] h-[30px] border-b border-l border-cyan-dim border-solid max-[500px]:bottom-7 max-[500px]:left-7 max-[500px]:w-5 max-[500px]:h-5"></div>
+  <div class="absolute bottom-[35px] right-[35px] w-[30px] h-[30px] border-b border-r border-cyan-dim border-solid max-[500px]:bottom-7 max-[500px]:right-7 max-[500px]:w-5 max-[500px]:h-5"></div>
 
   <!-- Horizontal divider lines -->
-  <div class="h-line h-line-top"></div>
-  <div class="h-line h-line-bottom"></div>
+  <div class="absolute left-[90px] right-[90px] h-px max-[500px]:left-[50px] max-[500px]:right-[50px]" style="top: calc(max(12px, env(safe-area-inset-top)) + 55px); background: linear-gradient(90deg, transparent, rgba(0,240,255,0.07) 20%, rgba(0,240,255,0.07) 80%, transparent)"></div>
+  <div class="absolute left-[90px] right-[90px] h-px max-[500px]:left-[50px] max-[500px]:right-[50px]" style="bottom: calc(max(12px, env(safe-area-inset-bottom)) + 42px); background: linear-gradient(90deg, transparent, rgba(0,240,255,0.07) 20%, rgba(0,240,255,0.07) 80%, transparent)"></div>
 
   <!-- Top bar -->
-  <div class="top-bar">
-    <div class="top-left">
-      <div class="label">LOCAL TIME</div>
-      <div class="value" id="hudTime">00:00:00</div>
-      <div class="label" style="margin-top:4px">DATE</div>
-      <div class="value" id="hudDate">2026.02.21</div>
+  <div class="absolute top-0 left-0 right-0 flex justify-between items-start px-5 pt-3" style="padding-top: max(12px, env(safe-area-inset-top))">
+    <div class="flex flex-col gap-0.5">
+      <div class="font-display text-[8px] font-bold tracking-[2px] text-cyan-dim uppercase">LOCAL TIME</div>
+      <div class="text-xs tracking-wider" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="hudTime">00:00:00</div>
+      <div class="font-display text-[8px] font-bold tracking-[2px] text-cyan-dim uppercase mt-1">DATE</div>
+      <div class="text-xs tracking-wider" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="hudDate">2026.02.21</div>
     </div>
-    <div class="top-center">
-      <div class="system-title">TACNET</div>
-      <div class="system-subtitle">AUGMENTED REALITY SYSTEM</div>
-      <div class="status-online" style="margin-top:4px;justify-content:center">
-        <div class="status-dot"></div>
-        <span style="color:var(--green);font-size:9px;letter-spacing:2px">SYSTEM ONLINE</span>
+    <div class="flex flex-col items-center absolute left-1/2 -translate-x-1/2" style="top: max(12px, env(safe-area-inset-top))">
+      <div class="font-display text-sm font-black tracking-[4px] text-cyan" style="text-shadow: 0 0 20px rgba(0,240,255,0.4), 0 0 40px rgba(0,240,255,0.07)">TACNET</div>
+      <div class="text-[9px] tracking-[3px] text-cyan-dim text-center">AUGMENTED REALITY SYSTEM</div>
+      <div class="flex items-center gap-1.5 mt-1 justify-center">
+        <div class="w-1.5 h-1.5 rounded-full bg-hud-green animate-status-pulse" style="box-shadow: 0 0 8px #00ff88"></div>
+        <span class="text-hud-green text-[9px] tracking-[2px]">SYSTEM ONLINE</span>
       </div>
     </div>
-    <div class="top-right">
-      <div class="label">POSITION</div>
-      <div class="value" id="hudCoords">--°--'--" N</div>
-      <div class="value" id="hudCoords2">--°--'--" W</div>
-      <div class="label" style="margin-top:4px">FPS</div>
-      <div class="value" id="hudFps">--</div>
+    <div class="flex flex-col items-end gap-0.5">
+      <div class="font-display text-[8px] font-bold tracking-[2px] text-cyan-dim uppercase">POSITION</div>
+      <div class="text-xs tracking-wider" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="hudCoords">--&deg;--'--" N</div>
+      <div class="text-xs tracking-wider" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="hudCoords2">--&deg;--'--" W</div>
+      <div class="font-display text-[8px] font-bold tracking-[2px] text-cyan-dim uppercase mt-1">FPS</div>
+      <div class="text-xs tracking-wider" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="hudFps">--</div>
     </div>
   </div>
 
-  <!-- Compass -->
-  <div class="compass-strip">
-    <div class="compass-inner" id="compassInner"></div>
+  <!-- Compass strip -->
+  <div class="absolute left-1/2 -translate-x-1/2 w-[280px] h-7 overflow-hidden border-l border-r border-cyan-dim" style="top: calc(max(12px, env(safe-area-inset-top)) + 58px)">
+    <!-- Triangle indicator via inline SVG -->
+    <div class="absolute top-0 left-1/2 -translate-x-1/2 z-[2]" style="filter: drop-shadow(0 0 4px #00f0ff)">
+      <svg width="10" height="6" viewBox="0 0 10 6"><polygon points="0,0 10,0 5,6" fill="#00f0ff"/></svg>
+    </div>
+    <div id="compassInner" class="flex items-center h-full text-[10px] tracking-wider whitespace-nowrap will-change-transform"></div>
   </div>
 
   <!-- Center reticle -->
-  <div class="reticle">
-    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <!-- Outer ring -->
-      <circle cx="100" cy="100" r="90" class="reticle-ring-outer" stroke-dasharray="8 4 2 4" />
-      <!-- Data arcs -->
-      <circle cx="100" cy="100" r="78" class="arc-data arc-data-1" />
-      <circle cx="100" cy="100" r="72" class="arc-data arc-data-2" />
-      <!-- Inner ring -->
-      <circle cx="100" cy="100" r="55" class="reticle-ring-inner" stroke-dasharray="12 6 3 6" />
-      <!-- Core ring -->
-      <circle cx="100" cy="100" r="35" class="reticle-ring-core" stroke-dasharray="4 8" />
-      <!-- Crosshairs -->
-      <line x1="100" y1="60" x2="100" y2="85" class="reticle-crosshair" />
-      <line x1="100" y1="115" x2="100" y2="140" class="reticle-crosshair" />
-      <line x1="60" y1="100" x2="85" y2="100" class="reticle-crosshair" />
-      <line x1="115" y1="100" x2="140" y2="100" class="reticle-crosshair" />
-      <!-- Diagonal ticks -->
-      <line x1="75" y1="75" x2="82" y2="82" class="reticle-crosshair" />
-      <line x1="125" y1="75" x2="118" y2="82" class="reticle-crosshair" />
-      <line x1="75" y1="125" x2="82" y2="118" class="reticle-crosshair" />
-      <line x1="125" y1="125" x2="118" y2="118" class="reticle-crosshair" />
-      <!-- Center dot -->
-      <circle cx="100" cy="100" r="2" class="reticle-center-dot" />
-      <!-- Small cardinal marks -->
-      <text x="100" y="52" text-anchor="middle" fill="var(--cyan)" font-family="var(--font-mono)" font-size="7" opacity="0.5">0</text>
-      <text x="100" y="155" text-anchor="middle" fill="var(--cyan)" font-family="var(--font-mono)" font-size="7" opacity="0.5">180</text>
-      <text x="48" y="103" text-anchor="middle" fill="var(--cyan)" font-family="var(--font-mono)" font-size="7" opacity="0.5">270</text>
-      <text x="152" y="103" text-anchor="middle" fill="var(--cyan)" font-family="var(--font-mono)" font-size="7" opacity="0.5">90</text>
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200px] h-[200px] max-[500px]:w-[150px] max-[500px]:h-[150px]">
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="w-full h-full" style="filter: drop-shadow(0 0 6px rgba(0,240,255,0.4))">
+      <circle cx="100" cy="100" r="90" fill="none" stroke="#00f0ff" stroke-width="1" stroke-dasharray="8 4 2 4" opacity="0.6" class="origin-center animate-rotate-12" />
+      <circle cx="100" cy="100" r="78" fill="none" stroke="#00f0ff" stroke-width="2" stroke-linecap="round" stroke-dasharray="30 15 10 15" opacity="0.6" class="origin-center animate-rotate-6" />
+      <circle cx="100" cy="100" r="72" fill="none" stroke="#ffaa00" stroke-width="2" stroke-linecap="round" stroke-dasharray="20 30 5 20" opacity="0.6" class="origin-center animate-rotate-10-rev" />
+      <circle cx="100" cy="100" r="55" fill="none" stroke="#00f0ff" stroke-width="1.5" stroke-dasharray="12 6 3 6" opacity="0.8" class="origin-center animate-rotate-8-rev" />
+      <circle cx="100" cy="100" r="35" fill="none" stroke="#00f0ff" stroke-width="1" stroke-dasharray="4 8" opacity="0.4" class="origin-center animate-rotate-20" />
+      <line x1="100" y1="60" x2="100" y2="85" stroke="#00f0ff" stroke-width="0.5" opacity="0.5" />
+      <line x1="100" y1="115" x2="100" y2="140" stroke="#00f0ff" stroke-width="0.5" opacity="0.5" />
+      <line x1="60" y1="100" x2="85" y2="100" stroke="#00f0ff" stroke-width="0.5" opacity="0.5" />
+      <line x1="115" y1="100" x2="140" y2="100" stroke="#00f0ff" stroke-width="0.5" opacity="0.5" />
+      <line x1="75" y1="75" x2="82" y2="82" stroke="#00f0ff" stroke-width="0.5" opacity="0.5" />
+      <line x1="125" y1="75" x2="118" y2="82" stroke="#00f0ff" stroke-width="0.5" opacity="0.5" />
+      <line x1="75" y1="125" x2="82" y2="118" stroke="#00f0ff" stroke-width="0.5" opacity="0.5" />
+      <line x1="125" y1="125" x2="118" y2="118" stroke="#00f0ff" stroke-width="0.5" opacity="0.5" />
+      <circle cx="100" cy="100" r="2" fill="#00f0ff" opacity="0.8" class="animate-center-pulse" />
+      <text x="100" y="52" text-anchor="middle" fill="#00f0ff" font-family="'Share Tech Mono', monospace" font-size="7" opacity="0.5">0</text>
+      <text x="100" y="155" text-anchor="middle" fill="#00f0ff" font-family="'Share Tech Mono', monospace" font-size="7" opacity="0.5">180</text>
+      <text x="48" y="103" text-anchor="middle" fill="#00f0ff" font-family="'Share Tech Mono', monospace" font-size="7" opacity="0.5">270</text>
+      <text x="152" y="103" text-anchor="middle" fill="#00f0ff" font-family="'Share Tech Mono', monospace" font-size="7" opacity="0.5">90</text>
     </svg>
   </div>
 
   <!-- Left panel — Telemetry -->
-  <div class="panel-left">
-    <div class="telemetry-block">
-      <div class="telemetry-label">HEART RATE</div>
-      <div class="telemetry-value" id="telHr">72 BPM</div>
-      <div class="telemetry-bar"><div class="telemetry-bar-fill green" id="hrBar" style="width:72%"></div></div>
+  <div class="absolute left-4 top-1/2 -translate-y-1/2 w-[130px] flex flex-col gap-2 max-[500px]:hidden min-[501px]:max-[800px]:w-[100px]">
+    <div class="bg-panel-bg border border-panel-border rounded-sm p-1.5 backdrop-blur-[4px]">
+      <div class="font-display text-[7px] font-bold tracking-[2px] text-cyan-dim mb-0.5">HEART RATE</div>
+      <div class="text-sm tracking-wider text-cyan" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="telHr">72 BPM</div>
+      <div class="h-0.5 bg-cyan-ultra mt-1 rounded-sm overflow-hidden"><div id="hrBar" class="h-full bg-hud-green rounded-sm transition-all duration-1000" style="width:72%; box-shadow: 0 0 6px rgba(0,255,136,0.5)"></div></div>
     </div>
-    <div class="telemetry-block">
-      <div class="telemetry-label">BLOOD O2</div>
-      <div class="telemetry-value" id="telO2">98%</div>
-      <div class="telemetry-bar"><div class="telemetry-bar-fill" id="o2Bar" style="width:98%"></div></div>
+    <div class="bg-panel-bg border border-panel-border rounded-sm p-1.5 backdrop-blur-[4px]">
+      <div class="font-display text-[7px] font-bold tracking-[2px] text-cyan-dim mb-0.5">BLOOD O2</div>
+      <div class="text-sm tracking-wider text-cyan" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="telO2">98%</div>
+      <div class="h-0.5 bg-cyan-ultra mt-1 rounded-sm overflow-hidden"><div id="o2Bar" class="h-full bg-cyan rounded-sm transition-all duration-1000" style="width:98%; box-shadow: 0 0 6px rgba(0,240,255,0.4)"></div></div>
     </div>
-    <div class="telemetry-block">
-      <div class="telemetry-label">CORE TEMP</div>
-      <div class="telemetry-value" id="telTemp">36.8°C</div>
-      <div class="telemetry-bar"><div class="telemetry-bar-fill" style="width:68%"></div></div>
+    <div class="bg-panel-bg border border-panel-border rounded-sm p-1.5 backdrop-blur-[4px]">
+      <div class="font-display text-[7px] font-bold tracking-[2px] text-cyan-dim mb-0.5">CORE TEMP</div>
+      <div class="text-sm tracking-wider text-cyan" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="telTemp">36.8&deg;C</div>
+      <div class="h-0.5 bg-cyan-ultra mt-1 rounded-sm overflow-hidden"><div class="h-full bg-cyan rounded-sm" style="width:68%; box-shadow: 0 0 6px rgba(0,240,255,0.4)"></div></div>
     </div>
-    <div class="telemetry-block">
-      <div class="telemetry-label">POWER CELL</div>
-      <div class="telemetry-value" id="telPower">87%</div>
-      <div class="telemetry-bar"><div class="telemetry-bar-fill amber" id="powerBar" style="width:87%"></div></div>
+    <div class="bg-panel-bg border border-panel-border rounded-sm p-1.5 backdrop-blur-[4px]">
+      <div class="font-display text-[7px] font-bold tracking-[2px] text-cyan-dim mb-0.5">POWER CELL</div>
+      <div class="text-sm tracking-wider text-cyan" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="telPower">87%</div>
+      <div class="h-0.5 bg-cyan-ultra mt-1 rounded-sm overflow-hidden"><div id="powerBar" class="h-full bg-amber rounded-sm transition-all duration-1000" style="width:87%; box-shadow: 0 0 6px rgba(255,170,0,0.5)"></div></div>
     </div>
-    <div class="telemetry-block">
-      <div class="telemetry-label">ALTITUDE</div>
-      <div class="telemetry-value" id="telAlt">47m ASL</div>
+    <div class="bg-panel-bg border border-panel-border rounded-sm p-1.5 backdrop-blur-[4px]">
+      <div class="font-display text-[7px] font-bold tracking-[2px] text-cyan-dim mb-0.5">ALTITUDE</div>
+      <div class="text-sm tracking-wider text-cyan" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="telAlt">47m ASL</div>
     </div>
   </div>
 
   <!-- Right panel — Systems -->
-  <div class="panel-right">
-    <div class="sys-block">
-      <div class="telemetry-label">SUBSYSTEMS</div>
-      <div class="sys-row"><span class="sys-label">OPTICS</span><span class="sys-val ok">ONLINE</span></div>
-      <div class="sys-row"><span class="sys-label">NAV</span><span class="sys-val ok">ONLINE</span></div>
-      <div class="sys-row"><span class="sys-label">COMMS</span><span class="sys-val ok">ONLINE</span></div>
-      <div class="sys-row"><span class="sys-label">SHIELD</span><span class="sys-val warn">STANDBY</span></div>
-      <div class="sys-row"><span class="sys-label">WEAPONS</span><span class="sys-val" style="color:var(--red)">LOCKED</span></div>
+  <div class="absolute right-4 top-1/2 -translate-y-1/2 w-[130px] flex flex-col gap-2 max-[500px]:hidden min-[501px]:max-[800px]:w-[100px]">
+    <div class="bg-panel-bg border border-panel-border rounded-sm p-1.5 backdrop-blur-[4px]">
+      <div class="font-display text-[7px] font-bold tracking-[2px] text-cyan-dim mb-0.5">SUBSYSTEMS</div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">OPTICS</span><span class="text-hud-green">ONLINE</span></div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">NAV</span><span class="text-hud-green">ONLINE</span></div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">COMMS</span><span class="text-hud-green">ONLINE</span></div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">SHIELD</span><span class="text-amber">STANDBY</span></div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">WEAPONS</span><span class="text-hud-red">LOCKED</span></div>
     </div>
-    <div class="sys-block">
-      <div class="telemetry-label">NETWORK</div>
-      <div class="sys-row"><span class="sys-label">LATENCY</span><span class="sys-val" id="sysLatency">12ms</span></div>
-      <div class="sys-row"><span class="sys-label">NODES</span><span class="sys-val" id="sysNodes">7</span></div>
-      <div class="sys-row"><span class="sys-label">ENCRYPT</span><span class="sys-val ok">AES-512</span></div>
+    <div class="bg-panel-bg border border-panel-border rounded-sm p-1.5 backdrop-blur-[4px]">
+      <div class="font-display text-[7px] font-bold tracking-[2px] text-cyan-dim mb-0.5">NETWORK</div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">LATENCY</span><span class="text-cyan" id="sysLatency">12ms</span></div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">NODES</span><span class="text-cyan" id="sysNodes">7</span></div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">ENCRYPT</span><span class="text-hud-green">AES-512</span></div>
     </div>
-    <div class="sys-block">
-      <div class="telemetry-label">THREAT LEVEL</div>
-      <div class="sys-row"><span class="sys-label">STATUS</span><span class="sys-val ok" id="threatStatus">CLEAR</span></div>
-      <div class="sys-row"><span class="sys-label">CONTACTS</span><span class="sys-val" id="threatContacts">0</span></div>
+    <div class="bg-panel-bg border border-panel-border rounded-sm p-1.5 backdrop-blur-[4px]">
+      <div class="font-display text-[7px] font-bold tracking-[2px] text-cyan-dim mb-0.5">THREAT LEVEL</div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">STATUS</span><span class="text-hud-green" id="threatStatus">CLEAR</span></div>
+      <div class="flex justify-between items-center text-[9px] tracking-wide py-px"><span class="text-white/30">CONTACTS</span><span class="text-cyan" id="threatContacts">0</span></div>
     </div>
   </div>
 
   <!-- Side ticks -->
-  <div class="side-ticks side-ticks-left" id="sideTicksL"></div>
-  <div class="side-ticks side-ticks-right" id="sideTicksR"></div>
+  <div id="sideTicksL" class="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col gap-3 items-start max-[500px]:hidden"></div>
+  <div id="sideTicksR" class="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-3 items-end max-[500px]:hidden"></div>
 
   <!-- Data stream -->
-  <div class="data-stream">
-    <div class="data-stream-content" id="dataStream"></div>
+  <div class="absolute right-[155px] top-1/2 -translate-y-1/2 h-[200px] w-[100px] overflow-hidden opacity-25 text-[8px] leading-relaxed tracking-wide text-cyan max-[800px]:hidden" style="-webkit-mask-image: linear-gradient(to bottom, transparent 0%, white 20%, white 80%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, white 20%, white 80%, transparent 100%)">
+    <div id="dataStream" class="animate-scroll-stream whitespace-pre-wrap"></div>
   </div>
 
   <!-- Radar -->
-  <div class="radar-container">
-    <svg viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="45" cy="45" r="40" class="radar-grid" stroke-width="0.5" />
-      <circle cx="45" cy="45" r="27" class="radar-grid" stroke-width="0.5" />
-      <circle cx="45" cy="45" r="14" class="radar-grid" stroke-width="0.5" />
-      <line x1="5" y1="45" x2="85" y2="45" class="radar-grid" stroke-width="0.3" />
-      <line x1="45" y1="5" x2="45" y2="85" class="radar-grid" stroke-width="0.3" />
-      <!-- Sweep -->
-      <g class="radar-sweep">
-        <line x1="45" y1="45" x2="45" y2="5" stroke="var(--cyan)" stroke-width="1" opacity="0.8" />
+  <div class="absolute left-5 w-[90px] h-[90px] max-[500px]:w-[70px] max-[500px]:h-[70px]" style="bottom: calc(max(12px, env(safe-area-inset-bottom)) + 48px)">
+    <svg viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg" class="w-full h-full" style="filter: drop-shadow(0 0 4px rgba(0,240,255,0.07))">
+      <circle cx="45" cy="45" r="40" fill="none" stroke="#00f0ff" stroke-width="0.5" opacity="0.15" />
+      <circle cx="45" cy="45" r="27" fill="none" stroke="#00f0ff" stroke-width="0.5" opacity="0.15" />
+      <circle cx="45" cy="45" r="14" fill="none" stroke="#00f0ff" stroke-width="0.5" opacity="0.15" />
+      <line x1="5" y1="45" x2="85" y2="45" stroke="#00f0ff" stroke-width="0.3" opacity="0.15" />
+      <line x1="45" y1="5" x2="45" y2="85" stroke="#00f0ff" stroke-width="0.3" opacity="0.15" />
+      <g class="origin-center animate-radar-sweep">
+        <line x1="45" y1="45" x2="45" y2="5" stroke="#00f0ff" stroke-width="1" opacity="0.8" />
         <path d="M 45 45 L 45 5 A 40 40 0 0 1 73 17 Z" fill="url(#sweepGrad)" />
       </g>
       <defs>
         <linearGradient id="sweepGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="var(--cyan)" stop-opacity="0.3" />
-          <stop offset="100%" stop-color="var(--cyan)" stop-opacity="0" />
+          <stop offset="0%" stop-color="#00f0ff" stop-opacity="0.3" />
+          <stop offset="100%" stop-color="#00f0ff" stop-opacity="0" />
         </linearGradient>
       </defs>
-      <!-- Blips -->
-      <circle cx="58" cy="28" r="2" class="radar-blip" />
-      <circle cx="32" cy="55" r="2" class="radar-blip" />
-      <circle cx="65" cy="60" r="1.5" class="radar-blip" />
-      <!-- Center -->
-      <circle cx="45" cy="45" r="2" fill="var(--cyan)" opacity="0.9" />
+      <circle cx="58" cy="28" r="2" fill="#00f0ff" opacity="0" class="animate-blip" />
+      <circle cx="32" cy="55" r="2" fill="#00f0ff" opacity="0" class="animate-blip" style="animation-delay: 1.3s" />
+      <circle cx="65" cy="60" r="1.5" fill="#00f0ff" opacity="0" class="animate-blip" style="animation-delay: 2.7s" />
+      <circle cx="45" cy="45" r="2" fill="#00f0ff" opacity="0.9" />
     </svg>
   </div>
 
   <!-- Threat Grid -->
-  <div class="threat-grid">
-    <svg viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg">
-      <!-- Grid lines -->
-      <line x1="0" y1="0" x2="90" y2="0" class="grid-line" />
-      <line x1="0" y1="15" x2="90" y2="15" class="grid-line" />
-      <line x1="0" y1="30" x2="90" y2="30" class="grid-line" />
-      <line x1="0" y1="45" x2="90" y2="45" class="grid-line" />
-      <line x1="0" y1="60" x2="90" y2="60" class="grid-line" />
-      <line x1="0" y1="75" x2="90" y2="75" class="grid-line" />
-      <line x1="0" y1="90" x2="90" y2="90" class="grid-line" />
-      <line x1="0" y1="0" x2="0" y2="90" class="grid-line" />
-      <line x1="15" y1="0" x2="15" y2="90" class="grid-line" />
-      <line x1="30" y1="0" x2="30" y2="90" class="grid-line" />
-      <line x1="45" y1="0" x2="45" y2="90" class="grid-line" />
-      <line x1="60" y1="0" x2="60" y2="90" class="grid-line" />
-      <line x1="75" y1="0" x2="75" y2="90" class="grid-line" />
-      <line x1="90" y1="0" x2="90" y2="90" class="grid-line" />
-      <!-- Scan lines -->
-      <line x1="0" y1="0" x2="90" y2="0" class="grid-scan-h" />
-      <line x1="0" y1="0" x2="0" y2="90" class="grid-scan-v" />
-      <!-- Zone label -->
-      <text x="45" y="48" text-anchor="middle" fill="var(--cyan)" font-family="var(--font-display)" font-size="6" letter-spacing="2" opacity="0.5">SECTOR 7G</text>
+  <div class="absolute right-5 w-[90px] h-[90px] max-[500px]:w-[70px] max-[500px]:h-[70px]" style="bottom: calc(max(12px, env(safe-area-inset-bottom)) + 48px)">
+    <svg viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+      <line x1="0" y1="0" x2="90" y2="0" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="0" y1="15" x2="90" y2="15" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="0" y1="30" x2="90" y2="30" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="0" y1="45" x2="90" y2="45" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="0" y1="60" x2="90" y2="60" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="0" y1="75" x2="90" y2="75" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="0" y1="90" x2="90" y2="90" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="0" y1="0" x2="0" y2="90" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="15" y1="0" x2="15" y2="90" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="30" y1="0" x2="30" y2="90" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="45" y1="0" x2="45" y2="90" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="60" y1="0" x2="60" y2="90" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="75" y1="0" x2="75" y2="90" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="90" y1="0" x2="90" y2="90" stroke="#00f0ff" stroke-width="0.5" opacity="0.12" />
+      <line x1="0" y1="0" x2="90" y2="0" stroke="#00f0ff" stroke-width="1" opacity="0.6" class="animate-scan-h" />
+      <line x1="0" y1="0" x2="0" y2="90" stroke="#00f0ff" stroke-width="1" opacity="0.6" class="animate-scan-v" />
+      <text x="45" y="48" text-anchor="middle" fill="#00f0ff" font-family="'Orbitron', sans-serif" font-size="6" letter-spacing="2" opacity="0.5">SECTOR 7G</text>
     </svg>
   </div>
 
   <!-- Bottom bar -->
-  <div class="bottom-bar">
-    <div class="bottom-left">
-      <div class="label">MISSION</div>
-      <div class="value" style="font-size:10px" id="missionTimer">00:00:00</div>
+  <div class="absolute bottom-0 left-0 right-0 flex justify-between items-end px-5 pb-3" style="padding-bottom: max(12px, env(safe-area-inset-bottom))">
+    <div class="flex flex-col gap-0.5">
+      <div class="font-display text-[8px] font-bold tracking-[2px] text-cyan-dim uppercase">MISSION</div>
+      <div class="text-[10px] tracking-wider" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="missionTimer">00:00:00</div>
     </div>
-    <div class="bottom-right">
-      <div class="label">FEED RES</div>
-      <div class="value" style="font-size:10px" id="feedRes">--x--</div>
+    <div class="flex flex-col gap-0.5 items-end">
+      <div class="font-display text-[8px] font-bold tracking-[2px] text-cyan-dim uppercase">FEED RES</div>
+      <div class="text-[10px] tracking-wider" style="text-shadow: 0 0 8px rgba(0,240,255,0.15)" id="feedRes">--x--</div>
     </div>
   </div>
 
@@ -1016,7 +333,6 @@
 (function() {
   'use strict';
 
-  // ═══ ELEMENTS ═══
   const video = document.getElementById('cameraFeed');
   const hud = document.getElementById('hud');
   const permissionPrompt = document.getElementById('permissionPrompt');
@@ -1024,7 +340,6 @@
   const bootScreen = document.getElementById('bootScreen');
   const bootText = document.getElementById('bootText');
 
-  // ═══ BOOT SEQUENCE ═══
   const bootLines = [
     'TACNET KERNEL v4.7.2 LOADING...',
     'INIT MEMORY............ 64GB OK',
@@ -1044,15 +359,18 @@
 
   function runBootSequence() {
     bootScreen.classList.remove('hidden');
+    bootScreen.classList.add('flex');
     bootText.innerHTML = '';
 
     let i = 0;
     function addLine() {
       if (i >= bootLines.length) {
         setTimeout(() => {
-          bootScreen.classList.add('fade-out');
+          bootScreen.style.opacity = '0';
+          bootScreen.style.pointerEvents = 'none';
           setTimeout(() => {
             bootScreen.classList.add('hidden');
+            bootScreen.classList.remove('flex');
             hud.style.transition = 'opacity 1s ease';
             hud.style.opacity = '1';
             startHUD();
@@ -1062,11 +380,10 @@
       }
 
       const line = document.createElement('div');
-      line.className = 'boot-line';
-      line.style.animationDelay = '0s';
+      line.className = 'opacity-0 animate-boot-fade';
 
       if (i === bootLines.length - 1) {
-        line.innerHTML = bootLines[i] + ' <span class="boot-cursor"></span>';
+        line.innerHTML = bootLines[i] + ' <span class="inline-block w-[7px] h-3.5 bg-cyan animate-blink align-middle ml-0.5"></span>';
       } else {
         line.textContent = bootLines[i];
       }
@@ -1082,7 +399,6 @@
     addLine();
   }
 
-  // ═══ CAMERA INIT ═══
   btnActivate.addEventListener('click', async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -1093,7 +409,6 @@
       permissionPrompt.classList.add('hidden');
       runBootSequence();
     } catch (err) {
-      // Try front camera as fallback
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } }
@@ -1108,41 +423,46 @@
     }
   });
 
-  // ═══ COMPASS GENERATION ═══
   function buildCompass() {
     const container = document.getElementById('compassInner');
-    const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-    const degs = [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180, 202.5, 225, 247.5, 270, 292.5, 315, 337.5];
+    const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+    const degs = [0,22.5,45,67.5,90,112.5,135,157.5,180,202.5,225,247.5,270,292.5,315,337.5];
 
-    // Build twice for seamless loop
     let html = '';
     for (let rep = 0; rep < 2; rep++) {
       for (let i = 0; i < dirs.length; i++) {
         const isCardinal = dirs[i].length === 1;
-        html += `<span class="compass-mark ${isCardinal ? 'cardinal' : ''}">${Math.round(degs[i])}°${dirs[i]}</span>`;
-        html += `<span class="compass-tick ${isCardinal ? 'major' : ''}"></span>`;
+        if (isCardinal) {
+          html += `<span class="inline-flex items-center justify-center min-w-[40px] text-cyan font-display font-bold text-[11px]" style="text-shadow: 0 0 6px rgba(0,240,255,0.4)">${Math.round(degs[i])}&deg;${dirs[i]}</span>`;
+          html += `<span class="inline-block w-px h-3.5 bg-cyan mx-[19px]"></span>`;
+        } else {
+          html += `<span class="inline-flex items-center justify-center min-w-[40px] text-cyan-dim text-[9px]">${Math.round(degs[i])}&deg;${dirs[i]}</span>`;
+          html += `<span class="inline-block w-px h-2 bg-cyan-dim mx-[19px]"></span>`;
+        }
       }
     }
     container.innerHTML = html;
   }
 
-  // ═══ SIDE TICKS ═══
   function buildSideTicks() {
     const left = document.getElementById('sideTicksL');
     const right = document.getElementById('sideTicksR');
     let html = '';
     for (let i = 0; i < 20; i++) {
-      html += `<div class="side-tick ${i % 5 === 0 ? 'long' : ''}"></div>`;
+      if (i % 5 === 0) {
+        html += `<div class="w-2 h-px bg-cyan"></div>`;
+      } else {
+        html += `<div class="w-1 h-px bg-cyan-dim"></div>`;
+      }
     }
     left.innerHTML = html;
     right.innerHTML = html;
   }
 
-  // ═══ DATA STREAM ═══
   function buildDataStream() {
     const el = document.getElementById('dataStream');
     const entries = [];
-    const prefixes = ['SYS', 'NET', 'OPT', 'NAV', 'SEC', 'BIO', 'PWR', 'COM', 'TGT', 'RAD'];
+    const prefixes = ['SYS','NET','OPT','NAV','SEC','BIO','PWR','COM','TGT','RAD'];
     const hex = '0123456789ABCDEF';
 
     for (let i = 0; i < 60; i++) {
@@ -1152,12 +472,10 @@
       entries.push(`${prefix}:0x${val}`);
     }
 
-    // Duplicate for seamless scroll
     const text = entries.join('\n') + '\n' + entries.join('\n');
     el.textContent = text;
   }
 
-  // ═══ GEOLOCATION ═══
   let currentLat = null, currentLon = null;
 
   function formatCoord(deg, pos, neg) {
@@ -1166,7 +484,7 @@
     const d = Math.floor(deg);
     const m = Math.floor((deg - d) * 60);
     const s = ((deg - d - m / 60) * 3600).toFixed(1);
-    return `${d}°${String(m).padStart(2,'0')}'${String(s).padStart(4,'0')}" ${dir}`;
+    return `${d}\u00B0${String(m).padStart(2,'0')}'${String(s).padStart(4,'0')}" ${dir}`;
   }
 
   function updateGeo() {
@@ -1180,23 +498,19 @@
           document.getElementById('telAlt').textContent = Math.round(pos.coords.altitude) + 'm ASL';
         }
       }, () => {
-        document.getElementById('hudCoords').textContent = '51°30\'26.4" N';
-        document.getElementById('hudCoords2').textContent = '0°07\'39.5" W';
+        document.getElementById('hudCoords').textContent = '51\u00B030\'26.4" N';
+        document.getElementById('hudCoords2').textContent = '0\u00B007\'39.5" W';
       });
     }
   }
 
-  // ═══ HUD DATA UPDATE LOOP ═══
   let missionStart = null;
   let frameCount = 0;
   let lastFpsTime = 0;
-  let compassOffset = 0;
-  let compassDir = 1;
   let currentHeading = 0;
   let powerLevel = 87;
 
   function updateHUD(timestamp) {
-    // FPS
     frameCount++;
     if (timestamp - lastFpsTime >= 1000) {
       document.getElementById('hudFps').textContent = frameCount;
@@ -1204,28 +518,25 @@
       lastFpsTime = timestamp;
     }
 
-    // Time
     const now = new Date();
     document.getElementById('hudTime').textContent =
-      String(now.getHours()).padStart(2, '0') + ':' +
-      String(now.getMinutes()).padStart(2, '0') + ':' +
-      String(now.getSeconds()).padStart(2, '0');
+      String(now.getHours()).padStart(2,'0') + ':' +
+      String(now.getMinutes()).padStart(2,'0') + ':' +
+      String(now.getSeconds()).padStart(2,'0');
 
     const dateStr = now.getFullYear() + '.' +
-      String(now.getMonth() + 1).padStart(2, '0') + '.' +
-      String(now.getDate()).padStart(2, '0');
+      String(now.getMonth()+1).padStart(2,'0') + '.' +
+      String(now.getDate()).padStart(2,'0');
     document.getElementById('hudDate').textContent = dateStr;
 
-    // Mission timer
     if (missionStart) {
       const elapsed = Math.floor((Date.now() - missionStart) / 1000);
-      const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
-      const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
-      const s = String(elapsed % 60).padStart(2, '0');
+      const h = String(Math.floor(elapsed / 3600)).padStart(2,'0');
+      const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2,'0');
+      const s = String(elapsed % 60).padStart(2,'0');
       document.getElementById('missionTimer').textContent = `${h}:${m}:${s}`;
     }
 
-    // Compass drift (simulated gentle heading change)
     currentHeading += (Math.random() - 0.48) * 0.3;
     if (currentHeading < 0) currentHeading += 360;
     if (currentHeading >= 360) currentHeading -= 360;
@@ -1234,12 +545,10 @@
     const offset = (currentHeading / 360) * totalWidth;
     compassEl.style.transform = `translateX(calc(-${offset}px + 140px))`;
 
-    // Feed resolution
     if (video.videoWidth) {
       document.getElementById('feedRes').textContent = video.videoWidth + 'x' + video.videoHeight;
     }
 
-    // Biometric jitter
     if (Math.random() < 0.05) {
       const hr = 68 + Math.floor(Math.random() * 12);
       document.getElementById('telHr').textContent = hr + ' BPM';
@@ -1252,17 +561,15 @@
     }
     if (Math.random() < 0.02) {
       const temp = (36.5 + Math.random() * 0.6).toFixed(1);
-      document.getElementById('telTemp').textContent = temp + '°C';
+      document.getElementById('telTemp').textContent = temp + '\u00B0C';
     }
 
-    // Power drain
     if (Math.random() < 0.01) {
       powerLevel = Math.max(20, powerLevel - 0.1);
       document.getElementById('telPower').textContent = Math.round(powerLevel) + '%';
       document.getElementById('powerBar').style.width = powerLevel + '%';
     }
 
-    // Network jitter
     if (Math.random() < 0.04) {
       const lat = 8 + Math.floor(Math.random() * 15);
       document.getElementById('sysLatency').textContent = lat + 'ms';
@@ -1272,10 +579,8 @@
     requestAnimationFrame(updateHUD);
   }
 
-  // ═══ DEVICE ORIENTATION ═══
   function initOrientation() {
     if (window.DeviceOrientationEvent) {
-      // iOS 13+ requires permission
       if (typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission().then(state => {
           if (state === 'granted') {
@@ -1290,12 +595,10 @@
 
   function handleOrientation(e) {
     if (e.alpha !== null) {
-      // alpha is compass heading on some devices (0-360)
       currentHeading = e.alpha;
     }
   }
 
-  // ═══ START HUD ═══
   function startHUD() {
     missionStart = Date.now();
     buildCompass();
@@ -1303,10 +606,7 @@
     buildDataStream();
     updateGeo();
     initOrientation();
-
-    // Periodic geo update
     setInterval(updateGeo, 10000);
-
     requestAnimationFrame(updateHUD);
   }
 
