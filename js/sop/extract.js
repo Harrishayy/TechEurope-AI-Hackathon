@@ -38,6 +38,8 @@
   let recordedBlobUrl = '';
   let recordStartAt = 0;
   let recordTimerId = null;
+  let liveSampleTimerId = null;
+  let liveCapturedFrames = [];
 
   sourceMode.addEventListener('change', updateModeUI);
   generateBtn.addEventListener('click', handleGenerate);
@@ -81,10 +83,15 @@
 
         sop = await generateFromFrames(client, frames, context, 'pre-recorded video');
       } else {
-        if (!recordedBlob) throw new Error('Record a live clip first, then generate SOP.');
+        if (!recordedBlob && !liveCapturedFrames.length) {
+          throw new Error('Record a live clip first, then generate SOP.');
+        }
 
-        showMsg('Sampling recorded frames...', 'success');
-        const frames = await sampleVideoFramesFromBlob(recordedBlob);
+        let frames = [...liveCapturedFrames];
+        if (!frames.length && recordedBlob) {
+          showMsg('Sampling recorded frames...', 'success');
+          frames = await sampleVideoFramesFromBlob(recordedBlob);
+        }
         if (!frames.length) throw new Error('Could not extract frames from the recorded clip.');
 
         sop = await generateFromFrames(client, frames, context, 'live camera recording');
@@ -270,9 +277,11 @@ Rules:
 
       livePreview.srcObject = liveStream;
       livePreviewWrap.classList.remove('hidden');
+      await livePreview.play().catch(() => {});
 
       recordedChunks = [];
       recordedBlob = null;
+      liveCapturedFrames = [];
       clearRecordedPreview();
 
       const recordingType = pickRecordingType();
@@ -292,6 +301,7 @@ Rules:
 
       recorder.start(1000);
       startRecordTimer();
+      startLiveSampling();
       recordingBadge.classList.remove('hidden');
       recordStatus.textContent = 'Recording... perform the task now, then tap Stop.';
       startRecordBtn.disabled = true;
@@ -307,6 +317,7 @@ Rules:
       recorder.stop();
     }
     stopRecordTimer();
+    stopLiveSampling();
     recordingBadge.classList.add('hidden');
     startRecordBtn.disabled = false;
     stopRecordBtn.disabled = true;
@@ -341,6 +352,7 @@ Rules:
       livePreviewWrap.classList.add('hidden');
       recordingBadge.classList.add('hidden');
       stopRecordTimer();
+      stopLiveSampling();
     }
   }
 
@@ -371,6 +383,39 @@ Rules:
     recordedBlobUrl = URL.createObjectURL(recordedBlob);
     recordedPreview.src = recordedBlobUrl;
     recordedPreviewWrap.classList.remove('hidden');
+  }
+
+  function startLiveSampling() {
+    stopLiveSampling();
+    captureLiveFrameSample();
+    liveSampleTimerId = setInterval(captureLiveFrameSample, 1250);
+  }
+
+  function stopLiveSampling() {
+    if (liveSampleTimerId) {
+      clearInterval(liveSampleTimerId);
+      liveSampleTimerId = null;
+    }
+  }
+
+  function captureLiveFrameSample() {
+    if (!livePreview || livePreview.readyState < 2) return;
+    if (!livePreview.videoWidth || !livePreview.videoHeight) return;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const width = Math.min(960, livePreview.videoWidth);
+    const height = Math.round(width * (livePreview.videoHeight / livePreview.videoWidth));
+    canvas.width = width;
+    canvas.height = height;
+    ctx.drawImage(livePreview, 0, 0, width, height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    liveCapturedFrames.push(dataUrl.split(',')[1]);
+
+    if (liveCapturedFrames.length > 16) {
+      liveCapturedFrames = liveCapturedFrames.slice(liveCapturedFrames.length - 16);
+    }
   }
 
   function clearRecordedPreview() {
@@ -472,6 +517,7 @@ Rules:
   window.addEventListener('beforeunload', () => {
     stopRecording();
     stopLiveStream();
+    stopLiveSampling();
     clearRecordedPreview();
   });
 })();
