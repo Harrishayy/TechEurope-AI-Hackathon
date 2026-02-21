@@ -1079,8 +1079,15 @@ footer {
     left: 0;
     right: 0;
     z-index: 10;
+    display: flex;
+    justify-content: flex-start;
     padding: 0 20px;
     padding-bottom: max(24px, calc(env(safe-area-inset-bottom) + 20px));
+}
+
+.coach-overlay .hud-panel {
+    width: 50%;
+    min-width: 280px;
 }
 
 .hud-panel {
