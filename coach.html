@@ -14,6 +14,9 @@
     <!-- Camera Feed -->
     <video id="camera" autoplay playsinline muted></video>
 
+    <!-- MediaPipe Hand Tracking Overlay -->
+    <canvas id="tracking-overlay"></canvas>
+
     <!-- Top Bar -->
     <div class="coach-topbar">
       <a href="index.html" class="back-btn" aria-label="Exit">&times;</a>
@@ -39,7 +42,10 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
   <script src="js/gemini.js"></script>
+  <script src="js/coaching/tracker.js"></script>
   <script src="js/coaching/coach.js"></script>
 </body>
 </html>
