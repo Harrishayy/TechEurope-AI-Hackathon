@@ -1,14 +1,61 @@
 # SkillLens Product Requirements Document (PRD)
 
-## 1) Purpose
+## 1) Product Vision & Core Idea
 
-SkillLens helps frontline workers learn physical workflows (for example, making espresso) using real-time camera-based guidance and AI-generated step instructions.
+**SkillLens** is an AI coaching assistant for physical work. A user points their phone camera at equipment (e.g., espresso machine), and SkillLens identifies where they are in a workflow and gives the next instruction in real time.
 
-This PRD update defines how to restructure the repository into a **frontend + backend architecture** that is easy for beginner developers who are primarily comfortable with **TypeScript**.
+### Problem
+- Frontline training is often inconsistent, expensive, and hard to scale.
+- New workers need in-the-moment support, not just a static manual.
+
+### Core idea we are building
+- "Mentor in your pocket" for step-by-step operational guidance.
+- Combine camera frames + SOP context + AI reasoning to guide actions live.
 
 ---
 
-## 2) Goals of This Update
+## 2) Hackathon Context & Success Criteria
+
+### Hackathon framing
+This project is a hackathon submission focused on proving product value quickly with a working demo and clear path to production hardening.
+
+### Hackathon criteria this PRD must support
+- **Demo clarity:** judges can understand value in under 60 seconds.
+- **Functional prototype:** end-to-end flow works on a phone browser.
+- **AI relevance:** AI materially improves the training experience (not cosmetic).
+- **Practical impact:** solves a real onboarding/training pain point.
+- **Execution quality:** usable UX, coherent architecture, clear trade-offs.
+
+### Demo scenario (current)
+- Barista onboarding workflow (espresso preparation) as the default demonstration.
+
+---
+
+## 3) Product Requirements (MVP)
+
+### User stories
+- As a trainee, I can open the app on my phone and get guided instructions while doing a task.
+- As a trainee, I can create a custom SOP from source text/transcript.
+- As a trainee, I can manually move to the next step if AI confidence is low.
+- As a trainer/manager, I can trust that guidance follows an SOP structure.
+
+### Functional requirements
+1. User can enter setup credentials/config and start the app quickly.
+2. App can capture camera frames periodically.
+3. App can generate SOP steps from pasted source content.
+4. App can analyze current frame against SOP context and return next instruction.
+5. App displays current/next step overlay with simple controls.
+6. App supports a prebuilt demo SOP (barista flow).
+
+### Non-functional requirements
+- Mobile-first UX (readable overlay, one-handed use).
+- Fast response loop suitable for live guidance.
+- Graceful fallback when model uncertainty is high.
+- Clear error states for camera/network/API issues.
+
+---
+
+## 4) Goals of This Update (Architecture Restructure)
 
 - Move from a static vanilla JS app to a maintainable TypeScript full-stack setup.
 - Keep developer onboarding simple (single package manager, clear scripts, low cognitive overhead).
@@ -16,7 +63,7 @@ This PRD update defines how to restructure the repository into a **frontend + ba
 
 ---
 
-## 3) Recommended Tech Stack (Beginner-Friendly)
+## 5) Recommended Tech Stack (Beginner-Friendly)
 
 ### Frontend
 - **Framework:** Next.js (App Router)
@@ -49,7 +96,7 @@ This PRD update defines how to restructure the repository into a **frontend + ba
 
 ---
 
-## 4) Proposed Repository Structure
+## 6) Proposed Repository Structure
 
 ```text
 skilllens/
@@ -72,10 +119,9 @@ skilllens/
 
 ---
 
-## 5) High-Level Responsibilities
+## 7) High-Level Responsibilities
 
 ### Frontend (`apps/web`)
-- User enters API key or signs in (future)
 - Camera permissions + preview
 - Coaching overlay UI and step controls
 - SOP create/edit screens
@@ -90,7 +136,7 @@ skilllens/
 
 ---
 
-## 6) API Design (Initial)
+## 8) API Design (Initial)
 
 - `POST /api/sop/extract`
   - Input: free-text training content
@@ -110,7 +156,7 @@ skilllens/
 
 ---
 
-## 7) Environment & Security Requirements
+## 9) Environment & Security Requirements
 
 - Gemini API key must live on the backend only (not in browser local storage).
 - Use environment variables:
@@ -122,7 +168,7 @@ skilllens/
 
 ---
 
-## 8) Migration Plan (Incremental)
+## 10) Migration Plan (Incremental)
 
 ### Phase 0: Foundation
 - Create monorepo scaffold (`apps/web`, `apps/api`).
@@ -151,12 +197,12 @@ skilllens/
 
 ---
 
-## 9) Definition of Done (for the restructure epic)
+## 11) Definition of Done (Restructure Epic)
 
 - Repo follows frontend/backend monorepo layout.
 - Frontend and backend are both TypeScript.
 - No direct Gemini API calls from browser.
-- Existing demo flow works end-to-end through backend APIs.
+- Existing hackathon demo flow works end-to-end through backend APIs.
 - New developer can run project locally with:
   - `pnpm install`
   - `pnpm dev`
@@ -164,7 +210,7 @@ skilllens/
 
 ---
 
-## 10) Beginner Onboarding Checklist
+## 12) Beginner Onboarding Checklist
 
 - Keep setup to <= 5 commands.
 - Provide copy-paste `.env.example` with comments.
@@ -176,7 +222,7 @@ skilllens/
 
 ---
 
-## 11) Out of Scope (for this restructure step)
+## 13) Out of Scope (for this restructure step)
 
 - Native mobile apps
 - Advanced auth/SSO
