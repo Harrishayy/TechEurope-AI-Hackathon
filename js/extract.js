@@ -8,17 +8,17 @@
   const sopPreview = document.getElementById('sopPreview');
   const sopSteps = document.getElementById('sopSteps');
   const sopTitle = document.getElementById('sopTitle');
-  const startBtn = document.getElementById('startCoaching');
+  const saveBtn = document.getElementById('saveSop');
   const editBtn = document.getElementById('editSop');
 
   let generatedSOP = null;
 
   generateBtn.addEventListener('click', handleGenerate);
 
-  startBtn.addEventListener('click', () => {
+  saveBtn.addEventListener('click', () => {
     if (generatedSOP) {
       localStorage.setItem('skilllens_current_sop', JSON.stringify(generatedSOP));
-      window.location.href = 'coach.html';
+      showMsg('SOP saved!', 'success');
     }
   });
 
