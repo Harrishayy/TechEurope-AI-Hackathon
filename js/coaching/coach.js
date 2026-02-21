@@ -26,13 +26,15 @@
 
   let client = null;
   let mode = 'ready'; // 'ready' | 'identifying' | 'coaching' | 'complete'
-  let steps = [];           // { text: string, completed: boolean }[]
+  let steps = [];           // { action: string, look_for: string, completed: boolean }[]
   let currentStep = 0;      // Index of first uncompleted step
   let isRunning = false;
   let isPaused = false;
   let isProcessing = false;
   let consecutiveErrors = 0;
   let backoffUntil = 0;
+  let currentObject = '';
+  let lostObjectStreak = 0;
 
   init();
 
@@ -125,11 +127,20 @@ Look at this image. Identify the main object, product, or piece of equipment vis
 Then generate a clear, practical set of 4–8 steps for how to use or interact with it.
 
 RESPOND WITH ONLY a valid JSON object in this exact format:
-{"object": "name of the object", "steps": ["step 1 text", "step 2 text", ...]}
+{
+  "object": "name of the object",
+  "steps": [
+    {
+      "action": "short action instruction",
+      "look_for": "visual cue that confirms this step"
+    }
+  ]
+}
 
 Rules:
-- Each step should be a short, actionable sentence (e.g. "Pull the tab on the top of the can")
+- Each step action should be short and actionable (e.g. "Pull the tab on the top of the can")
 - Reference physical features you can see (buttons, handles, labels, etc.)
+- Each look_for should describe a visual state the camera can verify
 - Steps should follow a logical sequence from start to finish
 - If the image is too blurry or dark, respond with: {"object": "unknown", "steps": []}
 - No markdown, no extra text — ONLY the JSON object`,
@@ -142,8 +153,10 @@ Rules:
       const parsed = parseIdentifyResponse(response);
 
       if (parsed && parsed.steps.length > 0) {
-        steps = parsed.steps.map(text => ({ text, completed: false }));
+        steps = parsed.steps.map(step => ({ action: step.action, look_for: step.look_for, completed: false }));
         currentStep = 0;
+        currentObject = parsed.object;
+        lostObjectStreak = 0;
         mode = 'coaching';
         setStatus(`${parsed.object} — follow the steps below`);
         renderSteps();
@@ -161,16 +174,52 @@ Rules:
   }
 
   function parseIdentifyResponse(text) {
+    function normalizeSteps(rawSteps) {
+      if (!Array.isArray(rawSteps)) return [];
+
+      return rawSteps.map((step) => {
+        if (typeof step === 'string' && step.trim()) {
+          return {
+            action: step.trim(),
+            look_for: 'Look for visible completion of this action.'
+          };
+        }
+
+        if (!step || typeof step !== 'object') return null;
+
+        const action = typeof step.action === 'string'
+          ? step.action.trim()
+          : (typeof step.text === 'string' ? step.text.trim() : '');
+
+        const lookFor = typeof step.look_for === 'string' && step.look_for.trim()
+          ? step.look_for.trim()
+          : 'Look for visible completion of this action.';
+
+        if (!action) return null;
+        return { action, look_for: lookFor };
+      }).filter(Boolean);
+    }
+
     try {
       let clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
       const parsed = JSON.parse(clean);
-      if (parsed.object && Array.isArray(parsed.steps)) return parsed;
+      if (parsed.object && Array.isArray(parsed.steps)) {
+        const steps = normalizeSteps(parsed.steps);
+        if (steps.length) {
+          return { object: parsed.object, steps };
+        }
+      }
     } catch {
       const match = text.match(/\{[\s\S]*\}/);
       if (match) {
         try {
           const parsed = JSON.parse(match[0]);
-          if (parsed.object && Array.isArray(parsed.steps)) return parsed;
+          if (parsed.object && Array.isArray(parsed.steps)) {
+            const steps = normalizeSteps(parsed.steps);
+            if (steps.length) {
+              return { object: parsed.object, steps };
+            }
+          }
         } catch { /* give up */ }
       }
     }
@@ -189,10 +238,11 @@ Rules:
 
     try {
       const stepList = steps.map((s, i) =>
-        `${i + 1}. [${s.completed ? 'DONE' : 'TODO'}] ${s.text}`
+        `${i + 1}. [${s.completed ? 'DONE' : 'TODO'}] ACTION: ${s.action} | LOOK FOR: ${s.look_for}`
       ).join('\n');
 
-      const currentStepText = steps[currentStep] ? steps[currentStep].text : '';
+      const currentStepText = steps[currentStep] ? steps[currentStep].action : '';
+      const currentStepLookFor = steps[currentStep] ? steps[currentStep].look_for : '';
 
       const response = await client.analyzeImage(
         `You are SkillLens, a vision AI coach tracking a user's progress through a checklist.
@@ -201,15 +251,17 @@ Here is the current step checklist:
 ${stepList}
 
 The user should be working on step ${currentStep + 1}: "${currentStepText}"
+Visual cue for this step: "${currentStepLookFor}"
 
 Look at the camera frame carefully. Describe what you see the user doing or what state the object is in, then determine which step they have reached.
 
 RESPOND WITH ONLY a valid JSON object in this exact format:
-{"observation": "brief description of what you see", "completed_step": N}
+{"observation": "brief description of what you see", "completed_step": N, "object_visible": true}
 
 Where N is:
 - The highest step number that appears to be done (e.g. 3 means steps 1-3 are complete)
 - 0 if the user hasn't visibly started or completed any TODO step yet
+- object_visible should be false if the target object is no longer clearly visible
 
 Rules:
 - Focus ONLY on the checklist steps — ignore anything else in the scene
@@ -230,8 +282,18 @@ Rules:
 
       if (!result) return;
 
+      if (result.object_visible === false) {
+        lostObjectStreak++;
+        setStatus(`Lost ${currentObject || 'object'} — bring it back into frame.`);
+        return;
+      }
+
+      lostObjectStreak = 0;
+
       if (result.completed_step > 0 && result.completed_step <= steps.length) {
         markCompleted(result.completed_step - 1);
+      } else if (currentStep >= 0 && currentStep < steps.length) {
+        setStatus(`Step ${currentStep + 1}: ${steps[currentStep].look_for}`);
       }
     } catch (err) {
       handleError(err);
@@ -244,20 +306,30 @@ Rules:
     try {
       let clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
       const parsed = JSON.parse(clean);
-      if (typeof parsed.completed_step === 'number') return parsed;
+      if (typeof parsed.completed_step === 'number') {
+        return {
+          ...parsed,
+          object_visible: typeof parsed.object_visible === 'boolean' ? parsed.object_visible : true
+        };
+      }
     } catch { /* fall through */ }
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
-        if (typeof parsed.completed_step === 'number') return parsed;
+        if (typeof parsed.completed_step === 'number') {
+          return {
+            ...parsed,
+            object_visible: typeof parsed.object_visible === 'boolean' ? parsed.object_visible : true
+          };
+        }
       } catch { /* fall through */ }
     }
 
     const numMatch = text.match(/-?\d+/);
     if (numMatch) {
-      return { observation: text.trim(), completed_step: parseInt(numMatch[0], 10) };
+      return { observation: text.trim(), completed_step: parseInt(numMatch[0], 10), object_visible: true };
     }
 
     return null;
@@ -316,6 +388,8 @@ Rules:
     mode = 'ready';
     steps = [];
     currentStep = 0;
+    currentObject = '';
+    lostObjectStreak = 0;
     stepListEl.innerHTML = '';
     updateBadge();
     updateButton();
@@ -338,7 +412,10 @@ Rules:
 
       el.innerHTML =
         `<span class="step-num">${step.completed ? '✓' : i + 1}</span>` +
-        `<span class="step-text">${escapeHtml(step.text)}</span>`;
+        `<span class="step-content">` +
+          `<span class="step-text">${escapeHtml(step.action)}</span>` +
+          `<span class="step-lookfor">Look for: ${escapeHtml(step.look_for)}</span>` +
+        `</span>`;
 
       stepListEl.appendChild(el);
     });
