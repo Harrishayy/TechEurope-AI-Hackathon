@@ -662,8 +662,6 @@ Rules:
         renderSteps();
         updateBadge();
         updateButton();
-        // Tell the Object Detector which COCO class to highlight
-        if (tracker) tracker.setTargetClass(parsed.detection_class || parsed.object);
         console.log(`[FOV] Identified: ${parsed.object}, class: ${parsed.detection_class}, ${steps.length} steps`);
       } else {
         setStatus('Can\'t identify — move closer or adjust the angle, then tap Start.');
@@ -796,7 +794,6 @@ Rules:
         markCompleted(result.completed_step - 1);
       } else if (currentStep >= 0 && currentStep < steps.length) {
         setStatus(`Step ${currentStep + 1}: ${steps[currentStep].look_for}`);
-        if (tracker) tracker.setCurrentStep(steps[currentStep]);
       }
     } catch (err) {
       handleError(err);
