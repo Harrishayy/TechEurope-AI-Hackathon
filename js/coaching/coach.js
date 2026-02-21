@@ -29,7 +29,7 @@
 
   let client = null;
   let mode = 'ready'; // 'ready' | 'identifying' | 'coaching' | 'complete'
-  let steps = [];           // { action: string, look_for: string, completed: boolean }[]
+  let steps = [];           // { text: string, completed: boolean }[]
   let currentStep = 0;      // Index of first uncompleted step
   let availableSops = [];
   let isRunning = false;
@@ -37,8 +37,6 @@
   let isProcessing = false;
   let consecutiveErrors = 0;
   let backoffUntil = 0;
-  let currentObject = '';
-  let lostObjectStreak = 0;
   let tracker = null;       // HandTracker instance — completely independent of Gemini
 
   init();
@@ -57,6 +55,10 @@
     pauseBtn.addEventListener('click', togglePause);
     loadSopBtn.addEventListener('click', loadSelectedSop);
     hydrateSopSelector();
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') hydrateSopSelector();
+    });
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -625,44 +627,31 @@ Look at this image. Identify the main object, product, or piece of equipment vis
 Then generate a clear, practical set of 4–8 steps for how to use or interact with it.
 
 RESPOND WITH ONLY a valid JSON object in this exact format:
-{
-  "object": "name of the object",
-  "detection_class": "cup",
-  "steps": [
-    {
-      "action": "short action instruction",
-      "look_for": "visual cue that confirms this step"
-    }
-  ]
-}
+{"object": "name of the object", "steps": ["step 1 text", "step 2 text", ...]}
 
 Rules:
-- Each step action should be short and actionable (e.g. "Pull the tab on the top of the can")
+- Each step should be a short, actionable sentence (e.g. "Pull the tab on the top of the can")
 - Reference physical features you can see (buttons, handles, labels, etc.)
-- Each look_for should describe a visual state the camera can verify
 - Steps should follow a logical sequence from start to finish
-- detection_class must be the single best matching COCO object detection class for this object (choose from: person, bottle, cup, bowl, fork, knife, spoon, banana, apple, orange, sandwich, broccoli, carrot, pizza, donut, cake, chair, dining table, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, toothbrush, backpack, handbag, suitcase, umbrella, tie, sports ball, bicycle, car, truck, bus, motorcycle, traffic light, stop sign)
-- If the image is too blurry or dark, respond with: {"object": "unknown", "detection_class": "", "steps": []}
+- If the image is too blurry or dark, respond with: {"object": "unknown", "steps": []}
 - No markdown, no extra text — ONLY the JSON object`,
         'Identify this object and generate usage steps.',
         base64,
-        { temperature: 0.3, maxTokens: 550 }
+        { temperature: 0.3, maxTokens: 500 }
       );
 
       consecutiveErrors = 0;
       const parsed = parseIdentifyResponse(response);
 
       if (parsed && parsed.steps.length > 0) {
-        steps = parsed.steps.map(step => ({ action: step.action, look_for: step.look_for, completed: false }));
+        steps = parsed.steps.map(text => ({ text, completed: false }));
         currentStep = 0;
-        currentObject = parsed.object;
-        lostObjectStreak = 0;
         mode = 'coaching';
         setStatus(`${parsed.object} — follow the steps below`);
         renderSteps();
         updateBadge();
         updateButton();
-        console.log(`[FOV] Identified: ${parsed.object}, class: ${parsed.detection_class}, ${steps.length} steps`);
+        console.log(`[FOV] Identified: ${parsed.object}, ${steps.length} steps`);
       } else {
         setStatus('Can\'t identify — move closer or adjust the angle, then tap Start.');
       }
@@ -674,40 +663,17 @@ Rules:
   }
 
   function parseIdentifyResponse(text) {
-    function normalizeSteps(rawSteps) {
-      if (!Array.isArray(rawSteps)) return [];
-
-      return rawSteps.map((step) => {
-        if (typeof step === 'string' && step.trim()) {
-          return {
-            action: step.trim(),
-            look_for: 'Look for visible completion of this action.'
-          };
-        }
-
-        if (!step || typeof step !== 'object') return null;
-
-        const action = typeof step.action === 'string'
-          ? step.action.trim()
-          : (typeof step.text === 'string' ? step.text.trim() : '');
-
-        const lookFor = typeof step.look_for === 'string' && step.look_for.trim()
-          ? step.look_for.trim()
-          : 'Look for visible completion of this action.';
-
-        if (!action) return null;
-        return { action, look_for: lookFor };
-      }).filter(Boolean);
-    }
-
     try {
       let clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
       const parsed = JSON.parse(clean);
       if (parsed.object && Array.isArray(parsed.steps)) {
-        const steps = normalizeSteps(parsed.steps);
-        if (steps.length) {
-          return { object: parsed.object, detection_class: parsed.detection_class || null, steps };
-        }
+        // Support both string steps and {action, look_for} objects from pre-loaded SOPs
+        const steps = parsed.steps.map((s) => {
+          if (typeof s === 'string') return s.trim();
+          if (s && typeof s === 'object') return (s.action || s.text || '').trim();
+          return '';
+        }).filter(Boolean);
+        if (steps.length) return { object: parsed.object, steps };
       }
     } catch {
       const match = text.match(/\{[\s\S]*\}/);
@@ -715,10 +681,12 @@ Rules:
         try {
           const parsed = JSON.parse(match[0]);
           if (parsed.object && Array.isArray(parsed.steps)) {
-            const steps = normalizeSteps(parsed.steps);
-            if (steps.length) {
-              return { object: parsed.object, detection_class: parsed.detection_class || null, steps };
-            }
+            const steps = parsed.steps.map((s) => {
+              if (typeof s === 'string') return s.trim();
+              if (s && typeof s === 'object') return (s.action || s.text || '').trim();
+              return '';
+            }).filter(Boolean);
+            if (steps.length) return { object: parsed.object, steps };
           }
         } catch { /* give up */ }
       }
@@ -738,11 +706,10 @@ Rules:
 
     try {
       const stepList = steps.map((s, i) =>
-        `${i + 1}. [${s.completed ? 'DONE' : 'TODO'}] ACTION: ${s.action} | LOOK FOR: ${s.look_for}`
+        `${i + 1}. [${s.completed ? 'DONE' : 'TODO'}] ${s.text}`
       ).join('\n');
 
-      const currentStepText = steps[currentStep] ? steps[currentStep].action : '';
-      const currentStepLookFor = steps[currentStep] ? steps[currentStep].look_for : '';
+      const currentStepText = steps[currentStep] ? steps[currentStep].text : '';
 
       const response = await client.analyzeImage(
         `You are FOV, a vision AI coach tracking a user's progress through a checklist.
@@ -751,17 +718,15 @@ Here is the current step checklist:
 ${stepList}
 
 The user should be working on step ${currentStep + 1}: "${currentStepText}"
-Visual cue for this step: "${currentStepLookFor}"
 
 Look at the camera frame carefully. Describe what you see the user doing or what state the object is in, then determine which step they have reached.
 
 RESPOND WITH ONLY a valid JSON object in this exact format:
-{"observation": "brief description of what you see", "completed_step": N, "object_visible": true}
+{"observation": "brief description of what you see", "completed_step": N}
 
 Where N is:
 - The highest step number that appears to be done (e.g. 3 means steps 1-3 are complete)
 - 0 if the user hasn't visibly started or completed any TODO step yet
-- object_visible should be false if the target object is no longer clearly visible
 
 Rules:
 - Focus ONLY on the checklist steps — ignore anything else in the scene
@@ -782,18 +747,10 @@ Rules:
 
       if (!result) return;
 
-      if (result.object_visible === false) {
-        lostObjectStreak++;
-        setStatus(`Lost ${currentObject || 'object'} — bring it back into frame.`);
-        return;
-      }
-
-      lostObjectStreak = 0;
-
       if (result.completed_step > 0 && result.completed_step <= steps.length) {
         markCompleted(result.completed_step - 1);
       } else if (currentStep >= 0 && currentStep < steps.length) {
-        setStatus(`Step ${currentStep + 1}: ${steps[currentStep].look_for}`);
+        setStatus(`Step ${currentStep + 1}: ${steps[currentStep].text}`);
       }
     } catch (err) {
       handleError(err);
@@ -806,30 +763,20 @@ Rules:
     try {
       let clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
       const parsed = JSON.parse(clean);
-      if (typeof parsed.completed_step === 'number') {
-        return {
-          ...parsed,
-          object_visible: typeof parsed.object_visible === 'boolean' ? parsed.object_visible : true
-        };
-      }
+      if (typeof parsed.completed_step === 'number') return parsed;
     } catch { /* fall through */ }
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
-        if (typeof parsed.completed_step === 'number') {
-          return {
-            ...parsed,
-            object_visible: typeof parsed.object_visible === 'boolean' ? parsed.object_visible : true
-          };
-        }
+        if (typeof parsed.completed_step === 'number') return parsed;
       } catch { /* fall through */ }
     }
 
     const numMatch = text.match(/-?\d+/);
     if (numMatch) {
-      return { observation: text.trim(), completed_step: parseInt(numMatch[0], 10), object_visible: true };
+      return { observation: text.trim(), completed_step: parseInt(numMatch[0], 10) };
     }
 
     return null;
@@ -854,10 +801,8 @@ Rules:
         setStatus('All done — nice work!');
         stepBadge.textContent = 'Complete';
         updateButton();
-        if (tracker) tracker.setCurrentStep(null);
       } else {
         updateBadge();
-        if (tracker) tracker.setCurrentStep(steps[currentStep]);
       }
 
       renderSteps();
@@ -890,17 +835,14 @@ Rules:
     mode = 'ready';
     if (steps.length > 0) {
       steps = steps.map((step) => ({
-        action: step.action,
-        look_for: step.look_for,
+        text: step.text || step.action || '',
         completed: false
       }));
       currentStep = 0;
     } else {
       steps = [];
       currentStep = 0;
-      currentObject = '';
     }
-    lostObjectStreak = 0;
     stepListEl.innerHTML = '';
     updateBadge();
     updateButton();
@@ -912,6 +854,17 @@ Rules:
     availableSops = loadSopsForAccount(accountId);
     const currentSop = safeJson(localStorage.getItem('skilllens_current_sop'));
 
+    // Merge skilllens_current_sop into list if missing (e.g. just saved from extract)
+    if (currentSop && Array.isArray(currentSop.steps) && currentSop.steps.length > 0) {
+      const id = currentSop.id || `sop_${Date.now()}`;
+      if (!currentSop.id) currentSop.id = id;
+      const exists = availableSops.some((s) => s.id === currentSop.id);
+      if (!exists) {
+        availableSops.unshift(currentSop);
+        localStorage.setItem(`skilllens_sops_${accountId}`, JSON.stringify(availableSops.slice(0, 100)));
+      }
+    }
+
     sopSelect.innerHTML = '';
     const identifyOption = document.createElement('option');
     identifyOption.value = '';
@@ -920,8 +873,8 @@ Rules:
 
     availableSops.forEach((sop) => {
       const opt = document.createElement('option');
-      opt.value = sop.id;
-      opt.textContent = sop.title || `SOP ${sop.id}`;
+      opt.value = sop.id || `sop_${sop.created_at || Date.now()}`;
+      opt.textContent = sop.title || `SOP ${sop.id || 'untitled'}`;
       sopSelect.appendChild(opt);
     });
 
@@ -938,8 +891,6 @@ Rules:
     if (!selectedId) {
       steps = [];
       currentStep = 0;
-      currentObject = '';
-      lostObjectStreak = 0;
       mode = 'ready';
       renderSteps();
       updateBadge();
@@ -967,8 +918,6 @@ Rules:
     localStorage.setItem('skilllens_current_sop', JSON.stringify(sop));
     steps = normalized;
     currentStep = 0;
-    currentObject = sop.title || '';
-    lostObjectStreak = 0;
     mode = 'ready';
     renderSteps();
     updateBadge();
@@ -979,37 +928,33 @@ Rules:
   function normalizeSopSteps(sop) {
     const rawSteps = Array.isArray(sop.steps) ? sop.steps : [];
     return rawSteps.map((step) => {
-      if (typeof step === 'string') {
-        const action = step.trim();
-        if (!action) return null;
-        return {
-          action,
-          look_for: 'Look for visible completion of this action.',
-          completed: false
-        };
-      }
-
-      const action = typeof step.action === 'string'
-        ? step.action.trim()
-        : (typeof step.text === 'string' ? step.text.trim() : '');
-      if (!action) return null;
-
-      const lookFor = typeof step.look_for === 'string' && step.look_for.trim()
-        ? step.look_for.trim()
-        : 'Look for visible completion of this action.';
-
-      return { action, look_for: lookFor, completed: false };
+      let text = '';
+      if (typeof step === 'string') text = step.trim();
+      else if (step && typeof step === 'object') text = (step.text || step.action || '').trim();
+      if (!text) return null;
+      return { text, completed: false };
     }).filter(Boolean);
   }
 
   function loadSopsForAccount(accountId) {
     const raw = localStorage.getItem(`skilllens_sops_${accountId}`);
     const parsed = safeJson(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const list = Array.isArray(parsed) ? parsed : [];
+    let changed = false;
+    const out = list.map((sop, i) => {
+      if (!sop.id) {
+        sop.id = `sop_${sop.created_at || Date.now()}_${i}`;
+        changed = true;
+      }
+      return sop;
+    });
+    if (changed) localStorage.setItem(`skilllens_sops_${accountId}`, JSON.stringify(out));
+    return out;
   }
 
   function getAccountId() {
-    return (localStorage.getItem('skilllens_account_id') || 'default').trim();
+    const raw = (localStorage.getItem('skilllens_account_id') || 'default').trim();
+    return raw ? raw.toLowerCase().replace(/\s+/g, '-') : 'default';
   }
 
   function safeJson(value) {
@@ -1038,10 +983,7 @@ Rules:
 
       el.innerHTML =
         `<span class="step-num">${step.completed ? '✓' : i + 1}</span>` +
-        `<span class="step-content">` +
-          `<span class="step-text">${escapeHtml(step.action)}</span>` +
-          `<span class="step-lookfor">Look for: ${escapeHtml(step.look_for)}</span>` +
-        `</span>`;
+        `<span class="step-text">${escapeHtml(step.text)}</span>`;
 
       stepListEl.appendChild(el);
     });
