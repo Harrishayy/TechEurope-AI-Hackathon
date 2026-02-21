@@ -31,9 +31,6 @@
         e.preventDefault();
         showStatus('Set your API key first', 'missing');
         keyInput.focus();
-      } else {
-        // Clear any custom SOP so coach uses default
-        localStorage.removeItem('skilllens_current_sop');
       }
     });
   }

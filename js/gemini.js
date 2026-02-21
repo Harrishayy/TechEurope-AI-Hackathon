@@ -1,6 +1,6 @@
 // Gemini API wrapper for SkillLens
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 class GeminiClient {
