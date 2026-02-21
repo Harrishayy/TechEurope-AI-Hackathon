@@ -14,63 +14,50 @@
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      align-items: center;
     }
 
+    /* ── Top bar ─────────────────────────────────────────── */
     header {
-      text-align: center;
-      padding: 1.25rem 1rem 1rem;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1.5rem;
       border-bottom: 1px solid #1e293b;
     }
     header h1 {
-      font-size: 1.5rem;
+      font-size: 1.1rem;
       font-weight: 700;
       letter-spacing: -0.02em;
       color: #f1f5f9;
     }
     #status {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: #64748b;
-      margin-top: 0.25rem;
     }
 
-    .workspace {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.25rem;
-      padding: 1.25rem;
-      flex: 1;
-      max-width: 1400px;
-      margin: 0 auto;
+    /* ── Main column ─────────────────────────────────────── */
+    .app {
       width: 100%;
-    }
-
-    .panel {
-      background: #1e293b;
-      border-radius: 12px;
-      padding: 1rem;
+      max-width: 860px;
+      padding: 1rem 1rem 2rem;
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
-    }
-    .panel h2 {
-      font-size: 0.85rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #94a3b8;
+      gap: 0;
     }
 
-    /* ── Video / Canvas wrappers ─────────────────────────── */
-    .media-wrapper {
+    /* ── Camera + overlays ───────────────────────────────── */
+    #camera-wrapper {
       position: relative;
       width: 100%;
-      aspect-ratio: 4 / 3;
+      aspect-ratio: 16 / 9;
       background: #000;
-      border-radius: 8px;
+      border-radius: 12px 12px 0 0;
       overflow: hidden;
     }
 
-    #video, #captured-img {
+    #video {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -78,27 +65,52 @@
       object-fit: cover;
       display: block;
     }
-    #captured-img { display: none; }
 
-    #annotation-canvas {
+    #overlay-canvas {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
       pointer-events: none;
+      z-index: 10;
     }
 
+    /* Description/result overlay at bottom of camera */
+    #camera-description {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,0.88));
+      padding: 2.5rem 1rem 0.9rem;
+      font-size: 0.83rem;
+      line-height: 1.55;
+      color: #e2e8f0;
+      z-index: 11;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    #camera-description.visible { opacity: 1; }
+    #camera-description .obj-count {
+      display: block;
+      margin-top: 0.25rem;
+      font-size: 0.72rem;
+      color: #94a3b8;
+    }
+
+    /* Loading spinner inside camera */
     .loading-overlay {
       position: absolute;
       inset: 0;
-      background: rgba(0, 0, 0, 0.65);
+      background: rgba(0,0,0,0.55);
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 0.9rem;
       color: #e2e8f0;
       gap: 0.5rem;
-      border-radius: 8px;
+      z-index: 20;
     }
     .spinner {
       width: 18px; height: 18px;
@@ -109,97 +121,20 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Controls ────────────────────────────────────────── */
-    .controls {
+    /* ── Tutorial bar (directly below camera, no gap) ────── */
+    .tutorial-bar {
+      background: #1e293b;
+      border-left: 1px solid #334155;
+      border-right: 1px solid #334155;
+      padding: 0.6rem 0.75rem;
       display: flex;
-      flex-wrap: wrap;
       gap: 0.5rem;
       align-items: center;
     }
 
-    button {
-      padding: 0.55rem 1rem;
-      border: none;
-      border-radius: 6px;
-      font-size: 0.85rem;
-      font-weight: 500;
-      cursor: pointer;
-      background: #3b82f6;
-      color: #fff;
-      transition: background 0.15s, opacity 0.15s;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-    button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
-    button:hover:not(:disabled) { background: #2563eb; }
-    button:active:not(:disabled) { background: #1d4ed8; }
-
-    #btn-voice { background: #475569; }
-    #btn-voice:hover:not(:disabled) { background: #334155; }
-    #btn-voice.listening { background: #ef4444; }
-    #btn-voice.listening:hover { background: #dc2626; }
-
-    #btn-mute { background: #475569; font-size: 0.8rem; }
-    #btn-mute:hover:not(:disabled) { background: #334155; }
-    #btn-mute.muted { background: #7c3aed; }
-
-    .transcript-box {
-      font-style: italic;
-      font-size: 0.8rem;
-      color: #94a3b8;
+    .tutorial-bar input[type="text"] {
       flex: 1;
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* ── Description box ─────────────────────────────────── */
-    .description {
-      font-size: 0.875rem;
-      line-height: 1.65;
-      padding: 0.75rem;
-      background: #0f172a;
-      border-radius: 8px;
-      min-height: 80px;
-      color: #cbd5e1;
-    }
-    .description small {
-      display: block;
-      margin-top: 0.4rem;
-      color: #475569;
-      font-size: 0.75rem;
-    }
-    .error-text { color: #f87171; }
-
-    @media (max-width: 768px) {
-      .workspace { grid-template-columns: 1fr; }
-    }
-
-    /* ── Tutorial overlay canvas on live video ───────────── */
-    #tutorial-overlay-canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 10;
-    }
-
-    /* ── Tutorial panel ──────────────────────────────────── */
-    .tutorial-topic-selector {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    .tutorial-topic-selector label {
-      font-size: 0.8rem;
-      color: #94a3b8;
-      white-space: nowrap;
-    }
-    .tutorial-topic-selector input[type="text"] {
-      flex: 1;
-      padding: 0.4rem 0.6rem;
+      padding: 0.45rem 0.7rem;
       background: #0f172a;
       color: #e2e8f0;
       border: 1px solid #334155;
@@ -207,69 +142,114 @@
       font-size: 0.85rem;
       outline: none;
       transition: border-color 0.15s;
+      min-width: 0;
     }
-    .tutorial-topic-selector input[type="text"]:focus {
-      border-color: #3b82f6;
-    }
-    .tutorial-topic-selector input[type="text"]::placeholder {
-      color: #475569;
-    }
-    .tutorial-topic-selector input[type="text"]:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
+    .tutorial-bar input[type="text"]:focus { border-color: #3b82f6; }
+    .tutorial-bar input[type="text"]::placeholder { color: #475569; }
+    .tutorial-bar input[type="text"]:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    .tutorial-step-display {
-      background: #0f172a;
-      border-radius: 8px;
-      padding: 1rem;
-      min-height: 100px;
+    /* ── Step instruction strip ──────────────────────────── */
+    #step-strip {
+      background: #1a2744;
+      border-left: 1px solid #334155;
+      border-right: 1px solid #334155;
+      padding: 0.7rem 1rem;
+      min-height: 60px;
       display: flex;
       flex-direction: column;
-      gap: 0.4rem;
-      flex: 1;
+      justify-content: center;
+      gap: 0.2rem;
     }
-    .tutorial-step-counter {
-      font-size: 0.75rem;
-      color: #475569;
-      font-weight: 600;
+    .step-counter {
+      font-size: 0.7rem;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.08em;
+      color: #475569;
     }
-    .tutorial-step-instruction {
-      font-size: 1rem;
-      line-height: 1.6;
+    .step-instruction {
+      font-size: 0.95rem;
+      line-height: 1.55;
       color: #f1f5f9;
     }
-    .tutorial-step-placeholder {
-      font-size: 0.875rem;
+    .step-placeholder {
+      font-size: 0.85rem;
       color: #475569;
       font-style: italic;
     }
 
-    .tutorial-controls {
+    /* ── Bottom controls bar ─────────────────────────────── */
+    .controls-bar {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 0 0 12px 12px;
+      padding: 0.6rem 0.75rem;
       display: flex;
       gap: 0.5rem;
-      flex-wrap: wrap;
       align-items: center;
+      flex-wrap: wrap;
     }
-    #btn-tutorial-start { background: #22c55e; }
-    #btn-tutorial-start:hover:not(:disabled) { background: #16a34a; }
-    #btn-tutorial-start.running { background: #ef4444; }
-    #btn-tutorial-start.running:hover:not(:disabled) { background: #dc2626; }
 
-    .tutorial-status-badge {
-      font-size: 0.75rem;
-      color: #64748b;
-      margin-left: auto;
+    /* ── Buttons ─────────────────────────────────────────── */
+    button {
+      padding: 0.48rem 0.9rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: #3b82f6;
+      color: #fff;
+      transition: background 0.15s, opacity 0.15s;
+      user-select: none;
+      -webkit-user-select: none;
+      white-space: nowrap;
+    }
+    button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #2563eb; }
+    button:active:not(:disabled) { background: #1d4ed8; }
+
+    #btn-start { background: #22c55e; }
+    #btn-start:hover:not(:disabled) { background: #16a34a; }
+    #btn-start.running { background: #ef4444; }
+    #btn-start.running:hover:not(:disabled) { background: #dc2626; }
+
+    #btn-next { background: #0ea5e9; }
+    #btn-next:hover:not(:disabled) { background: #0284c7; }
+
+    #btn-voice { background: #475569; }
+    #btn-voice:hover:not(:disabled) { background: #334155; }
+    #btn-voice.listening { background: #ef4444; }
+
+    #btn-analyze { background: #475569; }
+    #btn-analyze:hover:not(:disabled) { background: #334155; }
+
+    #btn-mute { background: #334155; font-size: 0.78rem; }
+    #btn-mute:hover:not(:disabled) { background: #475569; }
+    #btn-mute.muted { background: #7c3aed; }
+
+    .transcript-box {
+      font-style: italic;
+      font-size: 0.78rem;
+      color: #94a3b8;
+      flex: 1;
+      min-width: 60px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Tracking status ─────────────────────────────────── */
+    .tracking-badge {
       display: flex;
       align-items: center;
       gap: 0.3rem;
+      font-size: 0.75rem;
+      color: #64748b;
+      white-space: nowrap;
     }
     .tracking-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
+      width: 7px; height: 7px;
       border-radius: 50%;
       background: #475569;
       flex-shrink: 0;
@@ -279,8 +259,8 @@
       animation: pulse-dot 1.2s ease-in-out infinite;
     }
     @keyframes pulse-dot {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50%       { opacity: 0.55; transform: scale(0.75); }
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:0.5; transform:scale(0.7); }
     }
   </style>
 </head>
@@ -288,67 +268,48 @@
 
 <header>
   <h1>Vision Annotator</h1>
-  <p id="status">Requesting camera access…</p>
+  <span id="status">Requesting camera…</span>
 </header>
 
-<main class="workspace">
+<div class="app">
 
-  <!-- ── Left panel: live camera ──────────────────────────── -->
-  <section class="panel">
-    <h2>Live Camera</h2>
-    <div class="media-wrapper" id="camera-wrapper">
-      <video id="video" autoplay playsinline muted></video>
-      <canvas id="tutorial-overlay-canvas"></canvas>
-    </div>
-    <div class="controls">
-      <button id="btn-capture" disabled>Capture &amp; Analyze</button>
-      <button id="btn-voice"   disabled title="Hold to speak a custom prompt">Hold to Speak</button>
-      <span   id="transcript" class="transcript-box"></span>
-    </div>
-  </section>
+  <!-- ── Camera ──────────────────────────────────────────── -->
+  <div id="camera-wrapper">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay-canvas"></canvas>
+    <div id="camera-description"></div>
+  </div>
 
-  <!-- ── Right panel: tutorial ────────────────────────────── -->
-  <section class="panel">
-    <h2>Tutorial</h2>
+  <!-- ── Tutorial topic + start/next inline with camera ─── -->
+  <div class="tutorial-bar">
+    <input
+      type="text"
+      id="topic-input"
+      placeholder="What do you want to learn? (e.g. open a can, use a coffee machine)"
+      autocomplete="off"
+    />
+    <button id="btn-start"  disabled>Start</button>
+    <button id="btn-next"   disabled>Next  ⎵</button>
+  </div>
 
-    <div class="tutorial-topic-selector">
-      <label for="tutorial-topic-input">Topic:</label>
-      <input
-        type="text"
-        id="tutorial-topic-input"
-        placeholder="e.g. how to use a coffee machine"
-        autocomplete="off"
-      />
-    </div>
+  <!-- ── Current step instruction ──────────────────────── -->
+  <div id="step-strip">
+    <span class="step-placeholder">Enter a topic above and press Start — or just point the camera and click Analyze.</span>
+  </div>
 
-    <div class="tutorial-step-display" id="tutorial-step-display">
-      <span class="tutorial-step-placeholder">Select a topic and press Start to begin.</span>
-    </div>
+  <!-- ── Bottom controls ───────────────────────────────── -->
+  <div class="controls-bar">
+    <button id="btn-analyze" disabled>Analyze Frame</button>
+    <button id="btn-voice"   disabled>Hold to Speak</button>
+    <span   id="transcript"  class="transcript-box"></span>
+    <span class="tracking-badge">
+      <span class="tracking-dot" id="tracking-dot"></span>
+      <span id="tracking-status">Not tracking</span>
+    </span>
+    <button id="btn-mute">Voice: On</button>
+  </div>
 
-    <div class="tutorial-controls">
-      <button id="btn-tutorial-start" disabled>Start Tutorial</button>
-      <button id="btn-tutorial-next"  disabled>Next Step (Space)</button>
-      <span class="tutorial-status-badge">
-        <span class="tracking-dot" id="tracking-dot"></span>
-        <span id="tracking-status">Not tracking</span>
-      </span>
-    </div>
-
-    <div class="controls" style="margin-top: 0.25rem;">
-      <button id="btn-mute" title="Toggle voice output">Voice: On</button>
-    </div>
-
-    <!-- Capture & Analyze output — visible, stacks below tutorial controls -->
-    <div class="media-wrapper" id="output-wrapper">
-      <img    id="captured-img" alt="Captured frame" />
-      <canvas id="annotation-canvas"></canvas>
-    </div>
-    <div id="description-box" class="description">
-      <p>Capture a frame to see analysis…</p>
-    </div>
-  </section>
-
-</main>
+</div><!-- .app -->
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
@@ -360,571 +321,490 @@ const state = {
   recognition:     null,
   voiceTranscript: "",
   voiceMuted:      false,
+  descFadeTimer:   null,
 };
 
-const tutorialState = {
-  topic:              "",      // free-form user input
-  completedSteps:     [],      // step_description strings of finished steps
-  currentDescription: "",      // what the current step says (spoken + shown)
-  currentTarget:      "",      // what Gemini is tracking right now
-  currentHint:        "",      // spatial hint for the tracker
-  stepNumber:         0,       // 1-based display counter
+const tut = {
+  topic:              "",
+  completedSteps:     [],
+  currentDescription: "",
+  currentTarget:      "",
+  currentAction:      "",   // short_action from LLM, shown on annotation
+  currentHint:        "",
+  stepNumber:         0,
   isRunning:          false,
-  isGenerating:       false,   // true while /generate-step is in flight
-  target:           { x: 0, y: 0, w: 0, h: 0 },
-  current:          { x: 0, y: 0, w: 0, h: 0 },
+  isGenerating:       false,
+  target:  { x: 0, y: 0, w: 0, h: 0 },
+  current: { x: 0, y: 0, w: 0, h: 0 },
   analysisInterval: null,
   rafId:            null,
-  lastFoundBox:     null,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DOM
 // ═══════════════════════════════════════════════════════════════════════════
-const video              = document.getElementById("video");
-const btnCapture         = document.getElementById("btn-capture");
-const btnVoice           = document.getElementById("btn-voice");
-const btnMute            = document.getElementById("btn-mute");
-const transcriptEl       = document.getElementById("transcript");
-const capturedImg        = document.getElementById("captured-img");
-const canvas             = document.getElementById("annotation-canvas");
-const ctx                = canvas.getContext("2d");
-const descBox            = document.getElementById("description-box");
-const statusEl           = document.getElementById("status");
-const outputWrapper      = document.getElementById("output-wrapper");
-
-// Tutorial DOM refs
-const tutorialTopicInput  = document.getElementById("tutorial-topic-input");
-const tutorialStepDisplay = document.getElementById("tutorial-step-display");
-const btnTutorialStart    = document.getElementById("btn-tutorial-start");
-const btnTutorialNext     = document.getElementById("btn-tutorial-next");
-const trackingDot         = document.getElementById("tracking-dot");
-const trackingStatus      = document.getElementById("tracking-status");
-const tutorialCanvas      = document.getElementById("tutorial-overlay-canvas");
-const tutorialCtx         = tutorialCanvas.getContext("2d");
+const video         = document.getElementById("video");
+const overlayCanvas = document.getElementById("overlay-canvas");
+const overlayCtx    = overlayCanvas.getContext("2d");
+const cameraDesc    = document.getElementById("camera-description");
+const cameraWrapper = document.getElementById("camera-wrapper");
+const statusEl      = document.getElementById("status");
+const topicInput    = document.getElementById("topic-input");
+const stepStrip     = document.getElementById("step-strip");
+const btnStart      = document.getElementById("btn-start");
+const btnNext       = document.getElementById("btn-next");
+const btnAnalyze    = document.getElementById("btn-analyze");
+const btnVoice      = document.getElementById("btn-voice");
+const btnMute       = document.getElementById("btn-mute");
+const transcriptEl  = document.getElementById("transcript");
+const trackingDot   = document.getElementById("tracking-dot");
+const trackingStatus= document.getElementById("tracking-status");
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tutorial — step UI
+// Step display helpers
 // ═══════════════════════════════════════════════════════════════════════════
-function updateStepUI() {
-  tutorialStepDisplay.innerHTML = `
-    <span class="tutorial-step-counter">Step ${tutorialState.stepNumber}</span>
-    <span class="tutorial-step-instruction">${escapeHtml(tutorialState.currentDescription)}</span>
+function showStep() {
+  stepStrip.innerHTML = `
+    <span class="step-counter">Step ${tut.stepNumber}</span>
+    <span class="step-instruction">${escapeHtml(tut.currentDescription)}</span>
   `;
 }
-
 function showGenerating() {
-  tutorialStepDisplay.innerHTML = `
-    <span class="tutorial-step-counter">Thinking…</span>
-    <span class="tutorial-step-placeholder">Generating next step…</span>
+  stepStrip.innerHTML = `
+    <span class="step-counter">Thinking…</span>
+    <span class="step-placeholder">Generating next step…</span>
   `;
+}
+function showPlaceholder(text, color) {
+  stepStrip.innerHTML = `<span class="step-placeholder" style="${color ? `color:${color}` : ""}">${escapeHtml(text)}</span>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tutorial — generate next step from LLM
+// Generate next step from LLM
 // ═══════════════════════════════════════════════════════════════════════════
 async function generateNextStep() {
-  if (tutorialState.isGenerating) return;
-  tutorialState.isGenerating = true;
+  if (tut.isGenerating) return;
+  tut.isGenerating = true;
   showGenerating();
 
-  // Reset tracking so stale annotation doesn't linger
-  tutorialState.target   = { x: 0, y: 0, w: 0, h: 0 };
-  tutorialState.current  = { x: 0, y: 0, w: 0, h: 0 };
-  tutorialState.lastFoundBox = null;
-  tutorialState.currentTarget = "";
-  tutorialState.currentHint   = "";
+  // Clear stale annotation immediately
+  tut.target  = { x: 0, y: 0, w: 0, h: 0 };
+  tut.current = { x: 0, y: 0, w: 0, h: 0 };
+  tut.currentTarget = "";
+  tut.currentAction = "";
+  tut.currentHint   = "";
 
   try {
     const res = await fetch("/generate-step", {
-      method:  "POST",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        topic:           tutorialState.topic,
-        completed_steps: tutorialState.completedSteps,
-      }),
+      body: JSON.stringify({ topic: tut.topic, completed_steps: tut.completedSteps }),
     });
-
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
     if (data.is_complete) {
-      speakText("Tutorial complete! You've covered all the steps.");
+      speakText("Tutorial complete! You have covered all the steps.");
       stopTutorial();
-      tutorialStepDisplay.innerHTML = '<span class="tutorial-step-placeholder" style="color:#22c55e;">Tutorial complete! Great job.</span>';
+      showPlaceholder("Tutorial complete! Great job.", "#22c55e");
       return;
     }
 
-    tutorialState.currentDescription = data.step_description;
-    tutorialState.currentTarget      = data.target_object;
-    tutorialState.currentHint        = data.hint || "";
+    tut.currentDescription = data.step_description;
+    tut.currentTarget      = data.target_object;
+    tut.currentAction      = data.short_action || "";
+    tut.currentHint        = data.hint || "";
 
-    updateStepUI();
+    showStep();
     speakText(data.step_description);
     statusEl.textContent = `Tracking: ${data.target_object}`;
   } catch (err) {
-    tutorialStepDisplay.innerHTML = `<span class="tutorial-step-placeholder" style="color:#f87171;">Failed to generate step: ${escapeHtml(err.message)}</span>`;
-    console.error("generateNextStep error:", err);
+    showPlaceholder(`Error: ${err.message}`, "#f87171");
+    console.error("generateNextStep:", err);
   } finally {
-    tutorialState.isGenerating = false;
+    tut.isGenerating = false;
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tutorial — start / stop / next
+// Start / Stop / Next
 // ═══════════════════════════════════════════════════════════════════════════
 async function startTutorial() {
-  const topic = tutorialTopicInput.value.trim();
+  const topic = topicInput.value.trim();
   if (!topic) return;
 
-  tutorialState.topic          = topic;
-  tutorialState.completedSteps = [];
-  tutorialState.stepNumber     = 1;
-  tutorialState.isRunning      = true;
+  tut.topic          = topic;
+  tut.completedSteps = [];
+  tut.stepNumber     = 1;
+  tut.isRunning      = true;
 
-  btnTutorialStart.textContent = "Stop Tutorial";
-  btnTutorialStart.classList.add("running");
-  btnTutorialNext.disabled     = false;
-  tutorialTopicInput.disabled  = true;
+  btnStart.textContent = "Stop";
+  btnStart.classList.add("running");
+  btnNext.disabled     = false;
+  topicInput.disabled  = true;
+  btnAnalyze.disabled  = true;
 
+  clearQuickAnnotations();
   startRenderLoop();
   startTrackingLoop();
   await generateNextStep();
 }
 
 function stopTutorial() {
-  tutorialState.isRunning     = false;
-  tutorialState.isGenerating  = false;
+  tut.isRunning    = false;
+  tut.isGenerating = false;
 
-  if (tutorialState.analysisInterval) {
-    clearInterval(tutorialState.analysisInterval);
-    tutorialState.analysisInterval = null;
-  }
-  if (tutorialState.rafId) {
-    cancelAnimationFrame(tutorialState.rafId);
-    tutorialState.rafId = null;
-  }
+  clearInterval(tut.analysisInterval); tut.analysisInterval = null;
+  cancelAnimationFrame(tut.rafId);     tut.rafId = null;
 
-  tutorialCanvas.width  = tutorialCanvas.clientWidth;
-  tutorialCanvas.height = tutorialCanvas.clientHeight;
-  tutorialCtx.clearRect(0, 0, tutorialCanvas.width, tutorialCanvas.height);
+  overlayCanvas.width  = overlayCanvas.clientWidth;
+  overlayCanvas.height = overlayCanvas.clientHeight;
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-  btnTutorialStart.textContent = "Start Tutorial";
-  btnTutorialStart.classList.remove("running");
-  btnTutorialNext.disabled     = true;
-  tutorialTopicInput.disabled  = false;
+  btnStart.textContent = "Start";
+  btnStart.classList.remove("running");
+  btnNext.disabled     = true;
+  topicInput.disabled  = false;
+  if (state.stream) btnAnalyze.disabled = false;
+
   trackingDot.classList.remove("active");
-  trackingStatus.textContent   = "Not tracking";
-
-  tutorialStepDisplay.innerHTML = '<span class="tutorial-step-placeholder">Tutorial stopped. Type a topic and press Start to begin again.</span>';
+  trackingStatus.textContent = "Not tracking";
+  showPlaceholder("Tutorial stopped. Edit the topic and press Start again.");
 }
 
 async function nextStep() {
-  if (!tutorialState.isRunning || tutorialState.isGenerating) return;
-
-  // Archive the current step before generating the next
-  if (tutorialState.currentDescription) {
-    tutorialState.completedSteps.push(tutorialState.currentDescription);
-  }
-  tutorialState.stepNumber++;
+  if (!tut.isRunning || tut.isGenerating) return;
+  if (tut.currentDescription) tut.completedSteps.push(tut.currentDescription);
+  tut.stepNumber++;
   await generateNextStep();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tutorial — tracking loop (600ms Gemini poll)
+// Tutorial tracking loop — polls /analyze-step every 600 ms
 // ═══════════════════════════════════════════════════════════════════════════
 function startTrackingLoop() {
-  if (tutorialState.analysisInterval) clearInterval(tutorialState.analysisInterval);
+  clearInterval(tut.analysisInterval);
 
-  const pollOnce = async () => {
-    if (!tutorialState.isRunning || !state.stream) return;
-    if (!tutorialState.currentTarget || tutorialState.isGenerating) return;
+  const poll = async () => {
+    if (!tut.isRunning || !state.stream) return;
+    if (!tut.currentTarget || tut.isGenerating) return;
 
-    // Capture frame from live video
-    const offscreen  = document.createElement("canvas");
-    offscreen.width  = video.videoWidth  || 640;
-    offscreen.height = video.videoHeight || 480;
-    offscreen.getContext("2d").drawImage(video, 0, 0);
-    const base64 = offscreen.toDataURL("image/jpeg", 0.75).split(",")[1];
+    const off = document.createElement("canvas");
+    off.width  = video.videoWidth  || 640;
+    off.height = video.videoHeight || 480;
+    off.getContext("2d").drawImage(video, 0, 0);
+    const b64 = off.toDataURL("image/jpeg", 0.75).split(",")[1];
 
     try {
       const res = await fetch("/analyze-step", {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          image:            base64,
-          target_object:    tutorialState.currentTarget,
-          step_instruction: tutorialState.currentDescription,
-          hint:             tutorialState.currentHint,
-          width:            offscreen.width,
-          height:           offscreen.height,
+          image:            b64,
+          target_object:    tut.currentTarget,
+          step_instruction: tut.currentDescription,
+          hint:             tut.currentHint,
+          width: off.width, height: off.height,
         }),
       });
-
       if (!res.ok) return;
-
       const data = await res.json();
 
       if (data.found && data.box_2d) {
         const [ymin, xmin, ymax, xmax] = data.box_2d;
-        if (xmax - xmin < 5 || ymax - ymin < 5) return;  // skip degenerate boxes
-
-        const newBox = { x: xmin, y: ymin, w: xmax - xmin, h: ymax - ymin };
-        tutorialState.target      = newBox;
-        tutorialState.lastFoundBox = newBox;
-
+        if (xmax - xmin < 5 || ymax - ymin < 5) return;
+        tut.target = { x: xmin, y: ymin, w: xmax - xmin, h: ymax - ymin };
         trackingDot.classList.add("active");
-        trackingStatus.textContent = `Tracking: ${escapeHtml(data.label || tutorialState.currentTarget)}`;
+        trackingStatus.textContent = `Tracking: ${escapeHtml(data.label || tut.currentTarget)}`;
       } else {
-        // Hold last known position — don't reset target
         trackingDot.classList.remove("active");
         trackingStatus.textContent = "Searching…";
       }
-    } catch (err) {
-      console.warn("Tracking poll failed:", err.message);
-    }
+    } catch (e) { console.warn("poll:", e.message); }
   };
 
-  pollOnce();  // fire immediately, then on interval
-  tutorialState.analysisInterval = setInterval(pollOnce, 600);
+  poll();
+  tut.analysisInterval = setInterval(poll, 600);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tutorial — render loop (RAF with lerp + canvas drawing)
+// Tutorial render loop — lerp + AR bracket + action label
 // ═══════════════════════════════════════════════════════════════════════════
 function startRenderLoop() {
-  if (tutorialState.rafId) cancelAnimationFrame(tutorialState.rafId);
+  cancelAnimationFrame(tut.rafId);
 
   const LERP = 0.12;
   const lerp  = (a, b, t) => a + (b - a) * t;
 
   function frame() {
-    if (!tutorialState.isRunning) return;
-    tutorialState.rafId = requestAnimationFrame(frame);
+    if (!tut.isRunning) return;
+    tut.rafId = requestAnimationFrame(frame);
 
-    // Keep canvas resolution in sync with CSS size
-    if (tutorialCanvas.width  !== tutorialCanvas.clientWidth ||
-        tutorialCanvas.height !== tutorialCanvas.clientHeight) {
-      tutorialCanvas.width  = tutorialCanvas.clientWidth;
-      tutorialCanvas.height = tutorialCanvas.clientHeight;
+    // Keep canvas pixel-perfect with CSS size
+    if (overlayCanvas.width  !== overlayCanvas.clientWidth ||
+        overlayCanvas.height !== overlayCanvas.clientHeight) {
+      overlayCanvas.width  = overlayCanvas.clientWidth;
+      overlayCanvas.height = overlayCanvas.clientHeight;
     }
+    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-    tutorialCtx.clearRect(0, 0, tutorialCanvas.width, tutorialCanvas.height);
-
-    // Lerp toward target
-    const tgt = tutorialState.target;
-    const cur  = tutorialState.current;
+    // Lerp current toward target
+    const tgt = tut.target, cur = tut.current;
     cur.x = lerp(cur.x, tgt.x, LERP);
     cur.y = lerp(cur.y, tgt.y, LERP);
     cur.w = lerp(cur.w, tgt.w, LERP);
     cur.h = lerp(cur.h, tgt.h, LERP);
-
-    // Don't draw until a target has been established
     if (tgt.w < 5 && tgt.h < 5) return;
 
-    // Convert 0-1000 coords → canvas pixels
-    const cw = tutorialCanvas.width;
-    const ch = tutorialCanvas.height;
-    const px  = (cur.x / 1000) * cw;
-    const py  = (cur.y / 1000) * ch;
-    const pw  = (cur.w / 1000) * cw;
-    const ph  = (cur.h / 1000) * ch;
+    const cw = overlayCanvas.width, ch = overlayCanvas.height;
+    const px = (cur.x / 1000) * cw, py = (cur.y / 1000) * ch;
+    const pw = (cur.w / 1000) * cw, ph = (cur.h / 1000) * ch;
 
-    // Pulsing values via sine wave
-    const t      = Date.now() / 800;
-    const pulse  = 0.65 + 0.35 * Math.sin(t * Math.PI * 2);
-    const glow   = 0.10 + 0.15 * Math.sin(t * Math.PI * 2 + 1);
+    const t     = Date.now() / 800;
+    const pulse = 0.65 + 0.35 * Math.sin(t * Math.PI * 2);
+    const glow  = 0.10 + 0.15 * Math.sin(t * Math.PI * 2 + 1);
 
-    tutorialCtx.save();
+    overlayCtx.save();
 
-    // Outer glow fill
-    tutorialCtx.fillStyle = `rgba(56, 189, 248, ${glow})`;
-    tutorialCtx.fillRect(px, py, pw, ph);
+    // Glow fill
+    overlayCtx.fillStyle = `rgba(56, 189, 248, ${glow})`;
+    overlayCtx.fillRect(px, py, pw, ph);
 
-    // Corner brackets (cleaner AR look than full box)
-    const bLen = Math.min(pw * 0.22, ph * 0.22, 24);
-    tutorialCtx.strokeStyle = `rgba(56, 189, 248, ${pulse})`;
-    tutorialCtx.lineWidth   = 2.5;
-    tutorialCtx.lineCap     = "square";
-
-    const drawCorner = (cx, cy, dx, dy) => {
-      tutorialCtx.beginPath();
-      tutorialCtx.moveTo(cx + dx * bLen, cy);
-      tutorialCtx.lineTo(cx, cy);
-      tutorialCtx.lineTo(cx, cy + dy * bLen);
-      tutorialCtx.stroke();
+    // Corner brackets
+    const bLen = Math.min(pw * 0.22, ph * 0.22, 28);
+    overlayCtx.strokeStyle = `rgba(56, 189, 248, ${pulse})`;
+    overlayCtx.lineWidth = 2.5;
+    overlayCtx.lineCap   = "square";
+    const corner = (cx, cy, dx, dy) => {
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(cx + dx * bLen, cy);
+      overlayCtx.lineTo(cx, cy);
+      overlayCtx.lineTo(cx, cy + dy * bLen);
+      overlayCtx.stroke();
     };
-    drawCorner(px,      py,      1,  1);
-    drawCorner(px + pw, py,     -1,  1);
-    drawCorner(px,      py + ph, 1, -1);
-    drawCorner(px + pw, py + ph,-1, -1);
+    corner(px,      py,       1,  1);
+    corner(px + pw, py,      -1,  1);
+    corner(px,      py + ph,  1, -1);
+    corner(px + pw, py + ph, -1, -1);
 
-    // Arrow from outside the box to its center
-    const centerX  = px + pw / 2;
-    const centerY  = py + ph / 2;
-    const startX   = px - 32;
-    const startY   = py - 32;
-    const angle    = Math.atan2(centerY - startY, centerX - startX);
-    const headLen  = 11;
+    // Arrow from upper-left to center
+    const cx = px + pw / 2, cy = py + ph / 2;
+    const sx = px - 36,     sy = py - 36;
+    const angle = Math.atan2(cy - sy, cx - sx);
+    const hl    = 11;
+    overlayCtx.strokeStyle = `rgba(56, 189, 248, ${pulse * 0.9})`;
+    overlayCtx.lineWidth   = 2;
+    overlayCtx.lineCap     = "round";
+    overlayCtx.beginPath(); overlayCtx.moveTo(sx, sy); overlayCtx.lineTo(cx, cy); overlayCtx.stroke();
+    overlayCtx.strokeStyle = `rgba(56, 189, 248, ${pulse})`;
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(cx, cy);
+    overlayCtx.lineTo(cx - hl * Math.cos(angle - Math.PI/7), cy - hl * Math.sin(angle - Math.PI/7));
+    overlayCtx.moveTo(cx, cy);
+    overlayCtx.lineTo(cx - hl * Math.cos(angle + Math.PI/7), cy - hl * Math.sin(angle + Math.PI/7));
+    overlayCtx.stroke();
 
-    tutorialCtx.strokeStyle = `rgba(56, 189, 248, ${pulse * 0.9})`;
-    tutorialCtx.lineWidth   = 2;
-    tutorialCtx.lineCap     = "round";
-    tutorialCtx.beginPath();
-    tutorialCtx.moveTo(startX, startY);
-    tutorialCtx.lineTo(centerX, centerY);
-    tutorialCtx.stroke();
+    // ── Label badge with optional action line ────────────
+    const labelText  = tut.currentTarget || "";
+    const actionText = tut.currentAction  || "";
+    const fs         = Math.max(11, Math.min(14, pw * 0.09));
+    const afs        = Math.max(10, fs - 1);
 
-    // Arrowhead
-    tutorialCtx.strokeStyle = `rgba(56, 189, 248, ${pulse})`;
-    tutorialCtx.beginPath();
-    tutorialCtx.moveTo(centerX, centerY);
-    tutorialCtx.lineTo(centerX - headLen * Math.cos(angle - Math.PI / 7),
-                       centerY - headLen * Math.sin(angle - Math.PI / 7));
-    tutorialCtx.moveTo(centerX, centerY);
-    tutorialCtx.lineTo(centerX - headLen * Math.cos(angle + Math.PI / 7),
-                       centerY - headLen * Math.sin(angle + Math.PI / 7));
-    tutorialCtx.stroke();
+    overlayCtx.font = `bold ${fs}px system-ui, sans-serif`;
+    const lw = overlayCtx.measureText(labelText).width;
+    overlayCtx.font = `${afs}px system-ui, sans-serif`;
+    const aw = actionText ? overlayCtx.measureText("→ " + actionText).width : 0;
 
-    // Label badge above the box
-    const labelText = tutorialState.currentTarget || "";
-    const fontSize  = Math.max(11, Math.min(14, pw * 0.09));
-    tutorialCtx.font = `bold ${fontSize}px system-ui, sans-serif`;
-    const labelW    = tutorialCtx.measureText(labelText).width;
-    const labelH    = fontSize + 8;
-    const labelX    = px + pw / 2 - labelW / 2 - 6;
-    const labelY    = (py - labelH - 6 >= 0) ? py - labelH - 6 : py + ph + 6;
+    const badgeW = Math.max(lw, aw) + 16;
+    const badgeH = actionText ? (fs + afs + 14) : (fs + 10);
+    const badgeX = Math.max(2, Math.min(cw - badgeW - 2, px + pw / 2 - badgeW / 2));
+    const badgeY = (py - badgeH - 8 >= 0) ? py - badgeH - 8 : py + ph + 8;
 
-    tutorialCtx.fillStyle = "rgba(15, 23, 42, 0.85)";
-    tutorialCtx.beginPath();
-    tutorialCtx.roundRect(labelX, labelY, labelW + 12, labelH, 4);
-    tutorialCtx.fill();
+    overlayCtx.fillStyle = "rgba(15, 23, 42, 0.90)";
+    overlayCtx.beginPath();
+    overlayCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 5);
+    overlayCtx.fill();
 
-    tutorialCtx.fillStyle = `rgba(56, 189, 248, ${pulse})`;
-    tutorialCtx.fillText(labelText, labelX + 6, labelY + fontSize);
+    // Label (cyan)
+    overlayCtx.font      = `bold ${fs}px system-ui, sans-serif`;
+    overlayCtx.fillStyle = `rgba(56, 189, 248, ${pulse})`;
+    overlayCtx.fillText(labelText, badgeX + 8, badgeY + fs + 4);
 
-    tutorialCtx.restore();
+    // Action (amber)
+    if (actionText) {
+      overlayCtx.font      = `${afs}px system-ui, sans-serif`;
+      overlayCtx.fillStyle = `rgba(251, 191, 36, ${pulse * 0.95})`;
+      overlayCtx.fillText("→ " + actionText, badgeX + 8, badgeY + fs + afs + 10);
+    }
+
+    overlayCtx.restore();
   }
-
   frame();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Camera
+// Camera init
 // ═══════════════════════════════════════════════════════════════════════════
 async function initCamera() {
   try {
     state.stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width:      { ideal: 1280 },
-        height:     { ideal: 720  },
-        facingMode: "environment",
-      },
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "environment" },
       audio: false,
     });
     video.srcObject = state.stream;
     await video.play();
-
-    btnCapture.disabled = false;
-    btnVoice.disabled   = false;
-    statusEl.textContent = "Camera ready — capture a frame to analyze.";
+    btnAnalyze.disabled  = false;
+    btnVoice.disabled    = false;
+    statusEl.textContent = "Camera ready.";
   } catch (err) {
-    if (err.name === "NotAllowedError") {
-      statusEl.textContent = "Camera permission denied. Allow access and refresh the page.";
-    } else if (err.name === "NotFoundError") {
-      statusEl.textContent = "No camera found on this device.";
-    } else {
-      statusEl.textContent = `Camera error: ${err.message}`;
-    }
+    statusEl.textContent =
+      err.name === "NotAllowedError" ? "Camera permission denied." :
+      err.name === "NotFoundError"   ? "No camera found." :
+      `Camera error: ${err.message}`;
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Frame capture
+// Quick analyze (capture frame → /analyze → draw on live camera)
 // ═══════════════════════════════════════════════════════════════════════════
 function captureFrame() {
-  if (!state.stream || state.isAnalyzing) return;
+  if (!state.stream || state.isAnalyzing || tut.isRunning) return;
 
-  const offscreen = document.createElement("canvas");
-  offscreen.width  = video.videoWidth  || 640;
-  offscreen.height = video.videoHeight || 480;
-  const octx = offscreen.getContext("2d");
-  octx.drawImage(video, 0, 0);
-
-  const dataUrl = offscreen.toDataURL("image/jpeg", 0.85);
-  const base64  = dataUrl.split(",")[1];
-
-  // Show captured frame immediately in right panel
-  capturedImg.src           = dataUrl;
-  capturedImg.style.display = "block";
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  analyzeFrame(base64, offscreen.width, offscreen.height);
+  const off = document.createElement("canvas");
+  off.width  = video.videoWidth  || 640;
+  off.height = video.videoHeight || 480;
+  off.getContext("2d").drawImage(video, 0, 0);
+  analyzeFrame(off.toDataURL("image/jpeg", 0.85).split(",")[1], off.width, off.height);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// API call
-// ═══════════════════════════════════════════════════════════════════════════
-async function analyzeFrame(base64, origWidth, origHeight) {
+async function analyzeFrame(b64, origW, origH) {
   state.isAnalyzing   = true;
-  btnCapture.disabled = true;
+  btnAnalyze.disabled = true;
+  btnVoice.disabled   = true;
 
-  const overlay = document.createElement("div");
-  overlay.className = "loading-overlay";
-  overlay.innerHTML = '<div class="spinner"></div><span>Analyzing…</span>';
-  outputWrapper.appendChild(overlay);
-
-  descBox.innerHTML = "<p>Analyzing…</p>";
-  statusEl.textContent = "Sending frame to Gemini…";
+  const spinner = document.createElement("div");
+  spinner.className = "loading-overlay";
+  spinner.innerHTML = '<div class="spinner"></div><span>Analyzing…</span>';
+  cameraWrapper.appendChild(spinner);
+  statusEl.textContent = "Analyzing…";
 
   try {
     const res = await fetch("/analyze", {
-      method:  "POST",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        image:  base64,
-        prompt: state.voiceTranscript,
-        width:  origWidth,
-        height: origHeight,
-      }),
+      body: JSON.stringify({ image: b64, prompt: state.voiceTranscript, width: origW, height: origH }),
     });
-
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
       throw new Error(err.detail || `HTTP ${res.status}`);
     }
-
     const data = await res.json();
-    drawAnnotations(data, origWidth, origHeight);
-    statusEl.textContent = `${data.objects.length} object(s) detected.`;
-
+    drawAnalysisAnnotations(data);
+    statusEl.textContent = `${data.objects.length} component(s) detected.`;
   } catch (err) {
-    descBox.innerHTML = `<p class="error-text">Error: ${err.message}</p>`;
-    statusEl.textContent = "Analysis failed.";
+    statusEl.textContent = `Error: ${err.message}`;
+    console.error(err);
   } finally {
-    state.isAnalyzing       = false;
-    btnCapture.disabled     = false;
-    state.voiceTranscript   = "";
+    state.isAnalyzing     = false;
+    btnAnalyze.disabled   = false;
+    btnVoice.disabled     = false;
+    state.voiceTranscript = "";
     transcriptEl.textContent = "";
-    overlay.remove();
+    spinner.remove();
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Canvas annotation drawing
+// Draw quick-analyze annotations on the live camera overlay canvas
 // ═══════════════════════════════════════════════════════════════════════════
 const BOX_COLORS = [
-  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#a855f7",
-  "#06b6d4", "#f97316", "#84cc16", "#ec4899", "#14b8a6",
+  "#3b82f6","#ef4444","#22c55e","#f59e0b","#a855f7",
+  "#06b6d4","#f97316","#84cc16","#ec4899","#14b8a6",
 ];
 
-function drawAnnotations(data, origWidth, origHeight) {
-  // Sync canvas drawing buffer to CSS-rendered size
-  canvas.width  = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
-
-  const scaleX = canvas.width  / origWidth;
-  const scaleY = canvas.height / origHeight;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+function drawAnalysisAnnotations(data) {
+  overlayCanvas.width  = overlayCanvas.clientWidth;
+  overlayCanvas.height = overlayCanvas.clientHeight;
+  const cw = overlayCanvas.width, ch = overlayCanvas.height;
+  overlayCtx.clearRect(0, 0, cw, ch);
 
   data.objects.forEach((obj, i) => {
-    const [ymin_n, xmin_n, ymax_n, xmax_n] = obj.box_2d;
-
-    // 0-1000 → 0-1 → original pixels → canvas CSS pixels
-    const cx1 = (xmin_n / 1000) * origWidth  * scaleX;
-    const cy1 = (ymin_n / 1000) * origHeight * scaleY;
-    const cw  = ((xmax_n - xmin_n) / 1000) * origWidth  * scaleX;
-    const ch  = ((ymax_n - ymin_n) / 1000) * origHeight * scaleY;
-
+    const [yn, xn, ym, xm] = obj.box_2d;
+    const x = (xn / 1000) * cw, y = (yn / 1000) * ch;
+    const w = ((xm - xn) / 1000) * cw, h = ((ym - yn) / 1000) * ch;
     const color = BOX_COLORS[i % BOX_COLORS.length];
 
-    // Bounding box
-    ctx.strokeStyle = color;
-    ctx.lineWidth   = 2.5;
-    ctx.strokeRect(cx1, cy1, cw, ch);
+    // Box
+    overlayCtx.strokeStyle = color;
+    overlayCtx.lineWidth   = 2.5;
+    overlayCtx.strokeRect(x, y, w, h);
 
     // Label badge
-    const label      = obj.label;
-    const fontSize   = 12;
-    ctx.font         = `bold ${fontSize}px system-ui`;
-    const textW      = ctx.measureText(label).width;
-    const badgeH     = fontSize + 6;
-    const badgeY     = cy1 - badgeH - 2 >= 0 ? cy1 - badgeH - 2 : cy1 + 2;
+    const fs = 12;
+    overlayCtx.font = `bold ${fs}px system-ui`;
+    const tw = overlayCtx.measureText(obj.label).width;
+    const bh = fs + 6;
+    const by = y - bh - 2 >= 0 ? y - bh - 2 : y + 2;
 
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.roundRect(cx1, badgeY, textW + 10, badgeH, 3);
-    ctx.fill();
+    overlayCtx.fillStyle = color;
+    overlayCtx.beginPath();
+    overlayCtx.roundRect(x, by, tw + 10, bh, 3);
+    overlayCtx.fill();
 
-    ctx.fillStyle = "#fff";
-    ctx.fillText(label, cx1 + 5, badgeY + fontSize);
+    overlayCtx.fillStyle = "#fff";
+    overlayCtx.fillText(obj.label, x + 5, by + fs);
   });
 
-  // Description
-  descBox.innerHTML = `
-    <p>${escapeHtml(data.description)}</p>
-    <small>${data.objects.length} object(s) detected</small>
-  `;
-
+  // Description overlay on camera
+  cameraDesc.innerHTML = `${escapeHtml(data.description)}<span class="obj-count">${data.objects.length} component(s) highlighted</span>`;
+  cameraDesc.classList.add("visible");
   if (!state.voiceMuted) speakText(data.description);
+
+  clearTimeout(state.descFadeTimer);
+  state.descFadeTimer = setTimeout(clearQuickAnnotations, 10000);
 }
 
-function escapeHtml(str) {
-  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+function clearQuickAnnotations() {
+  clearTimeout(state.descFadeTimer);
+  state.descFadeTimer = null;
+  cameraDesc.classList.remove("visible");
+  if (!tut.isRunning) overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Voice input (Web Speech API — push-to-talk)
+// Voice input (push-to-talk → auto-analyze on release)
 // ═══════════════════════════════════════════════════════════════════════════
 function initVoiceInput() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    btnVoice.disabled = true;
-    btnVoice.title    = "Speech recognition not supported in this browser";
-    return;
-  }
+  if (!SR) { btnVoice.disabled = true; btnVoice.title = "Not supported"; return; }
 
-  const rec          = new SR();
-  rec.continuous     = false;
-  rec.interimResults = true;
-  rec.lang           = "en-US";
-  state.recognition  = rec;
+  const rec = new SR();
+  rec.continuous = false; rec.interimResults = true; rec.lang = "en-US";
+  state.recognition = rec;
 
   rec.onresult = (event) => {
     let interim = "", final = "";
-    for (const result of event.results) {
-      if (result.isFinal) final   += result[0].transcript;
-      else                interim += result[0].transcript;
+    for (const r of event.results) {
+      if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript;
     }
     transcriptEl.textContent = final || interim;
+
     if (final) {
-      const trimmed = final.trim().toLowerCase();
-
-      if (tutorialState.isRunning) {
-        // "next" → advance step
-        if (/\bnext\b/.test(trimmed)) {
-          nextStep();
-          state.voiceTranscript = "";
-          return;
-        }
+      const t = final.trim().toLowerCase();
+      if (tut.isRunning) {
+        if (/\bnext\b/.test(t)) { nextStep(); state.voiceTranscript = ""; return; }
       } else {
-        // "start" → start the tutorial if there's a topic in the input
-        if (/\bstart\b/.test(trimmed) && tutorialTopicInput.value.trim()) {
-          startTutorial();
-          state.voiceTranscript = "";
-          return;
-        }
-        // Anything else → treat as the topic
-        if (trimmed) {
-          tutorialTopicInput.value = final.trim();
-          btnTutorialStart.disabled = false;
-          statusEl.textContent = `Topic set — press Start or say "start"`;
-          state.voiceTranscript = "";
-          return;
-        }
+        if (/\bstart\b/.test(t) && topicInput.value.trim()) { startTutorial(); state.voiceTranscript = ""; return; }
+        // Otherwise treat as topic AND as prompt for quick analyze
+        topicInput.value = final.trim();
+        btnStart.disabled = false;
+        state.voiceTranscript = final.trim();
+        return;
       }
-
       state.voiceTranscript = final.trim();
     }
   };
@@ -932,120 +812,74 @@ function initVoiceInput() {
   rec.onend = () => {
     btnVoice.textContent = "Hold to Speak";
     btnVoice.classList.remove("listening");
+    // Auto-analyze on release when not in tutorial mode
+    if (state.voiceTranscript && !tut.isRunning && !state.isAnalyzing) captureFrame();
   };
 
   rec.onerror = (e) => {
-    transcriptEl.textContent = `Recognition error: ${e.error}`;
-    btnVoice.textContent     = "Hold to Speak";
+    transcriptEl.textContent = `Error: ${e.error}`;
+    btnVoice.textContent = "Hold to Speak";
     btnVoice.classList.remove("listening");
   };
 
-  const startListening = (e) => {
+  const start = (e) => {
     e.preventDefault();
-    state.voiceTranscript    = "";
+    state.voiceTranscript = "";
     transcriptEl.textContent = "Listening…";
-    btnVoice.textContent     = "Recording…";
+    btnVoice.textContent = "Recording…";
     btnVoice.classList.add("listening");
-    try { rec.start(); } catch (_) { /* already running */ }
+    try { rec.start(); } catch (_) {}
   };
+  const stop = (e) => { e.preventDefault(); rec.stop(); };
 
-  const stopListening = (e) => {
-    e.preventDefault();
-    rec.stop();
-  };
-
-  btnVoice.addEventListener("mousedown",  startListening);
-  btnVoice.addEventListener("touchstart", startListening, { passive: false });
-  btnVoice.addEventListener("mouseup",    stopListening);
-  btnVoice.addEventListener("mouseleave", stopListening);
-  btnVoice.addEventListener("touchend",   stopListening);
+  btnVoice.addEventListener("mousedown",  start);
+  btnVoice.addEventListener("touchstart", start, { passive: false });
+  btnVoice.addEventListener("mouseup",    stop);
+  btnVoice.addEventListener("mouseleave", stop);
+  btnVoice.addEventListener("touchend",   stop);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Voice output (SpeechSynthesis)
+// Voice output
 // ═══════════════════════════════════════════════════════════════════════════
 function speakText(text) {
-  if (!window.speechSynthesis || !text) return;
+  if (!window.speechSynthesis || !text || state.voiceMuted) return;
   window.speechSynthesis.cancel();
-
-  const utter   = new SpeechSynthesisUtterance(text);
-  utter.lang    = "en-US";
-  utter.rate    = 1.0;
-  utter.pitch   = 1.0;
-  utter.volume  = 1.0;
-
-  // Chrome workaround: resume if paused mid-utterance
-  utter.onpause = () => {
-    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-  };
-
-  const applyVoice = () => {
-    const voices   = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v =>
-      v.name.includes("Google US English") ||
-      v.name === "Alex" ||
-      (v.lang === "en-US" && v.localService)
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US"; u.rate = 1.0;
+  u.onpause = () => { if (window.speechSynthesis.paused) window.speechSynthesis.resume(); };
+  const go = () => {
+    const preferred = window.speechSynthesis.getVoices().find(v =>
+      v.name.includes("Google US English") || v.name === "Alex" || (v.lang === "en-US" && v.localService)
     );
-    if (preferred) utter.voice = preferred;
-    window.speechSynthesis.speak(utter);
+    if (preferred) u.voice = preferred;
+    window.speechSynthesis.speak(u);
   };
-
-  if (window.speechSynthesis.getVoices().length > 0) {
-    applyVoice();
-  } else {
-    window.speechSynthesis.onvoiceschanged = () => {
-      window.speechSynthesis.onvoiceschanged = null;
-      applyVoice();
-    };
-  }
+  window.speechSynthesis.getVoices().length > 0 ? go() : (window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.onvoiceschanged = null; go(); });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Mute toggle
+// Event wiring
 // ═══════════════════════════════════════════════════════════════════════════
 btnMute.addEventListener("click", () => {
   state.voiceMuted = !state.voiceMuted;
-  if (state.voiceMuted) {
-    window.speechSynthesis?.cancel();
-    btnMute.textContent = "Voice: Off";
-    btnMute.classList.add("muted");
-  } else {
-    btnMute.textContent = "Voice: On";
-    btnMute.classList.remove("muted");
-  }
+  window.speechSynthesis?.cancel();
+  btnMute.textContent = state.voiceMuted ? "Voice: Off" : "Voice: On";
+  btnMute.classList.toggle("muted", state.voiceMuted);
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Capture button
-// ═══════════════════════════════════════════════════════════════════════════
-btnCapture.addEventListener("click", captureFrame);
+btnAnalyze.addEventListener("click", captureFrame);
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Tutorial buttons + spacebar shortcut
-// ═══════════════════════════════════════════════════════════════════════════
-// Enable Start whenever the input has text
-tutorialTopicInput.addEventListener("input", (e) => {
-  btnTutorialStart.disabled = !e.target.value.trim();
-});
-// Enter in input → start immediately
-tutorialTopicInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && tutorialTopicInput.value.trim()) startTutorial();
-});
+topicInput.addEventListener("input", (e) => { btnStart.disabled = !e.target.value.trim(); });
+topicInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && topicInput.value.trim()) startTutorial(); });
 
-btnTutorialStart.addEventListener("click", () => {
-  if (tutorialState.isRunning) stopTutorial();
-  else startTutorial();
-});
-
-btnTutorialNext.addEventListener("click", nextStep);
+btnStart.addEventListener("click", () => { tut.isRunning ? stopTutorial() : startTutorial(); });
+btnNext.addEventListener("click",  nextStep);
 
 document.addEventListener("keydown", (e) => {
-  if (e.code === "Space" && tutorialState.isRunning) {
+  if (e.code === "Space" && tut.isRunning) {
     const tag = document.activeElement.tagName;
-    if (tag !== "INPUT" && tag !== "SELECT" && tag !== "TEXTAREA") {
-      e.preventDefault();
-      nextStep();
-    }
+    if (tag !== "INPUT" && tag !== "SELECT" && tag !== "TEXTAREA") { e.preventDefault(); nextStep(); }
   }
 });
 

@@ -74,6 +74,7 @@ class GenerateStepRequest(BaseModel):
 class GenerateStepResponse(BaseModel):
     step_description: str = Field(description="Instruction to speak aloud to the user")
     target_object: str = Field(description="Physical component to locate on camera")
+    short_action: str = Field(default="", description="2-4 word action phrase shown on the live annotation, e.g. 'Lift to open'")
     hint: str = Field(default="", description="Spatial hint to help find the component")
     is_complete: bool = Field(default=False)
 
@@ -81,21 +82,34 @@ class GenerateStepResponse(BaseModel):
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
 def build_prompt(user_prompt: str) -> str:
-    task = user_prompt.strip() if user_prompt.strip() else \
-        "Identify and describe the prominent objects or people visible in the scene."
+    if user_prompt.strip():
+        task = user_prompt.strip()
+        task_context = f"""Task: {task}
 
-    return f"""You are an intelligent vision assistant. Analyze the provided image.
+Identify ONLY the specific physical components directly relevant to this task.
+Be precise — annotate sub-components, not whole objects. For example:
+- "open a can" → annotate the can body AND the pull tab separately, not just "can"
+- "make coffee" → annotate the water tank lid, pod compartment door, brew button — not the whole machine
+- "open a bottle" → annotate the bottle cap, not the entire bottle
 
-Task: {task}
+Prioritise components in the order the user should interact with them (first action first).
+Return at most 5 objects."""
+    else:
+        task_context = """Task: Identify and briefly describe the most prominent objects visible in the scene.
+Return at most 6 objects."""
+
+    return f"""You are an intelligent vision assistant. Analyse the provided image.
+
+{task_context}
 
 Respond ONLY with a single valid JSON object — no markdown, no code fences, no explanation outside the JSON.
 The JSON must exactly follow this schema:
 
 {{
-  "description": "<2-3 sentence natural language description of what you see, suitable for text-to-speech>",
+  "description": "<2-3 sentence description focused on the task context, suitable for text-to-speech>",
   "objects": [
     {{
-      "label": "<object name>",
+      "label": "<specific component name>",
       "box_2d": [ymin, xmin, ymax, xmax],
       "confidence": <float 0.0 to 1.0>
     }}
@@ -105,9 +119,8 @@ The JSON must exactly follow this schema:
 Rules:
 - box_2d values are integers normalized to 0-1000 (0 = top/left edge, 1000 = bottom/right edge)
 - box_2d order is strictly [ymin, xmin, ymax, xmax]
-- Include at most 10 objects
 - description must be conversational and readable aloud — no special characters or markdown
-- If no objects are detected, return an empty objects array
+- If no relevant objects are detected, return an empty objects array
 - Do not include any text outside the JSON object"""
 
 
@@ -161,6 +174,7 @@ Respond ONLY with a single valid JSON object — no markdown, no code fences.
 {{
   "step_description": "<Friendly 1-2 sentence instruction, starts with an action verb, suitable for text-to-speech>",
   "target_object": "<Exact physical component to highlight on camera, max 8 words>",
+  "short_action": "<2-4 word action shown ON the annotation overlay, e.g. 'Lift to open', 'Turn left', 'Press firmly', 'Pull tab up'>",
   "hint": "<Optional spatial clue about where to find this component in a camera view>",
   "is_complete": <true or false>
 }}
@@ -326,6 +340,7 @@ async def generate_step(request: GenerateStepRequest):
     return GenerateStepResponse(
         step_description=parsed.get("step_description", ""),
         target_object=parsed.get("target_object", ""),
+        short_action=parsed.get("short_action", ""),
         hint=parsed.get("hint", ""),
         is_complete=bool(parsed.get("is_complete", False)),
     )
